@@ -1,0 +1,760 @@
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, ComposedChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, AreaChart, Area } from "recharts";
+import { Users, DollarSign, TrendingUp, AlertTriangle, Award, Target, ChevronDown, ChevronUp, Zap, Shield, Star, Trophy, Gamepad2 } from "lucide-react";
+
+const C = {
+  purple: '#4814DA', liberty: '#11152F', smoke: '#F5F5F5', cyan: '#5FDAF4',
+  green: '#22C55E', red: '#EF4444', amber: '#F59E0B', slate: '#475569',
+  chart: ['#4814DA','#5FDAF4','#D946EF','#F43F5E','#6366F1','#22C55E','#F97316','#8B5CF6'],
+};
+const fmt = {
+  c: (n) => `$${Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}`,
+  p: (n) => `${Number(n||0).toFixed(1)}%`,
+};
+
+// ═══ 3 REVENUE STREAMS × 3 SCENARIOS ═══
+const SC = {
+  conservador: {
+    label: "Conservador", color: '#6366F1',
+    correctivos: 280000, polizasNuevas: 100000, refacciones: 80000,
+    margenCorr: 0.30, margenPol: 0.45, margenRef: 0.35,
+    rampMonth: 6, // months until steady state
+  },
+  base: {
+    label: "Base", color: '#4814DA',
+    correctivos: 350000, polizasNuevas: 200000, refacciones: 150000,
+    margenCorr: 0.33, margenPol: 0.45, margenRef: 0.35,
+    rampMonth: 8,
+  },
+  optimista: {
+    label: "Optimista", color: '#22C55E',
+    correctivos: 420000, polizasNuevas: 310000, refacciones: 250000,
+    margenCorr: 0.35, margenPol: 0.50, margenRef: 0.38,
+    rampMonth: 10,
+  },
+};
+
+// ═══ INDIVIDUAL COMMISSION MODELS ═══
+function calcCommissions(sc) {
+  const { correctivos: corr, polizasNuevas: pol, refacciones: ref, margenCorr, margenPol, margenRef } = sc;
+  // Revenue by UN (approximate split based on P&L data)
+  const corrBAT = corr * 0.35, corrMONTA = corr * 0.35, corrMRCOOP = corr * 0.30;
+  const refBAT = ref * 0.50, refMONTA = ref * 0.30, refMRCOOP = ref * 0.20;
+  
+  const people = [
+    {
+      nombre: "Oscar Vázquez", puesto: "CEO", base: 50000,
+      streams: [
+        { tipo: "Pólizas", desc: "1% override nuevas pólizas (apertura relación WM)", rate: 0.01, revenue: pol, monto: pol * 0.01 },
+        { tipo: "Correctivos", desc: "0.5% CEO override todas las UNs", rate: 0.005, revenue: corr, monto: corr * 0.005 },
+        { tipo: "Refacciones", desc: "0.5% override venta refacciones", rate: 0.005, revenue: ref, monto: ref * 0.005 },
+      ],
+      nota: "Comp real vía distribución utilidades. Comisión = incentivo de crecimiento, no comp base.",
+      riesgo: "ok",
+    },
+    {
+      nombre: "Jazmín Olivares", puesto: "Gte Tesorería/SAC", base: 40000,
+      streams: [
+        { tipo: "Pólizas (primaria)", desc: "3% valor mensual nuevas pólizas — BAT-CUAUT activa, Transfers, Litio. Si participa supervisor: 2% Jaz + 1% Sup", rate: 0.03, revenue: pol, monto: pol * 0.025 },
+        { tipo: "Correctivos BAT", desc: "1% coordinación comercial WM (shared con Jaime)", rate: 0.01, revenue: corrBAT, monto: corrBAT * 0.01 },
+        { tipo: "Correctivos MrCoop", desc: "1% coordinación (shared con Jorge)", rate: 0.01, revenue: corrMRCOOP, monto: corrMRCOOP * 0.01 },
+        { tipo: "Refacciones", desc: "2% margen refacciones BAT+MrCoop que cierra", rate: 0.02, revenue: (refBAT+refMRCOOP)*margenRef, monto: (refBAT+refMRCOOP)*margenRef*0.02 },
+      ],
+      nota: "Vendedora primaria de pólizas. BAT-CUAUT ya activa. Pipeline: Transfers 9 CEDIS + Litio 7 CEDIS. Bono trimestral adicional $5K.",
+      riesgo: "clave",
+    },
+    {
+      nombre: "Thalía Ortiz", puesto: "Coord CxC & SAC", base: 19115,
+      streams: [
+        { tipo: "Montas correctivos", desc: "30% ejecutor del 4% pool (factura y cobra)", rate: null, revenue: corrMONTA, monto: corrMONTA * 0.04 * 0.30 },
+        { tipo: "Montas refacciones", desc: "50/50 con Gersom sobre 3% margen", rate: null, revenue: refMONTA*margenRef, monto: refMONTA*margenRef*0.03*0.50 },
+        { tipo: "Carritos (nueva línea)", desc: "2% venta póliza nueva de carritos", rate: 0.02, revenue: 50000, monto: 50000 * 0.02 },
+      ],
+      nota: "Clave O2C: su velocidad de facturación determina cash flow. Venta telefónica complementa a Gersom en campo. Carritos = nueva línea a explorar.",
+      riesgo: "ok",
+    },
+    {
+      nombre: "Jaime González", puesto: "Sup UN Baterías", base: 16950,
+      streams: [
+        { tipo: "Correctivos BAT cerrador", desc: "40% del 4% pool — cierra venta con gerente WM en CEDIS", rate: null, revenue: corrBAT, monto: corrBAT * 0.04 * 0.40 },
+        { tipo: "Pólizas asistencia", desc: "1% cuando hay evidencia de contribución (shared de Jazmín)", rate: 0.01, revenue: pol*0.6, monto: pol * 0.6 * 0.01 },
+        { tipo: "Refacciones BAT", desc: "2% margen celdas, cables, filtros, electrolito detectados/vendidos", rate: 0.02, revenue: refBAT*margenRef, monto: refBAT*margenRef*0.02 },
+      ],
+      nota: "Eliminar tope $3K — uncapped combinado. 30 técnicos generan volumen. Su inventario Litio/Transfers es bloqueador de pólizas.",
+      riesgo: "precaucion",
+    },
+    {
+      nombre: "Gersom García", puesto: "Sup UN Montacargas", base: 16950,
+      streams: [
+        { tipo: "Correctivos Montas cerrador", desc: "40% del 4% pool — venta dual campo + Thalía teléfono", rate: null, revenue: corrMONTA, monto: corrMONTA * 0.04 * 0.40 },
+        { tipo: "Refacciones Montas", desc: "3% margen — Kits Crown, llantas, frenos, hidráulico (50/50 con Thalía si aplica)", rate: 0.03, revenue: refMONTA*margenRef, monto: refMONTA*margenRef*0.03*0.60 },
+      ],
+      nota: "Modelo venta dual más maduro. Estacionalidad H2 fuerte (Ago-Dic). Kits Crown $174K invertidos = pipeline listo. Sin tope.",
+      riesgo: "ok",
+    },
+    {
+      nombre: "Jorge Argenis", puesto: "Sup UN MrCoop", base: 17871,
+      streams: [
+        { tipo: "Correctivos MrCoop cerrador", desc: "40% del 4% pool — cocinas, HVAC, RPC", rate: null, revenue: corrMRCOOP, monto: corrMRCOOP * 0.04 * 0.40 },
+        { tipo: "Pólizas asistencia", desc: "1% cuando contribuye (shared de Jazmín)", rate: 0.01, revenue: pol*0.3, monto: pol * 0.3 * 0.01 },
+        { tipo: "Refacciones MrCoop", desc: "2% margen — 18 items multi-sistema, consumibles, compresores", rate: 0.02, revenue: refMRCOOP*margenRef, monto: refMRCOOP*margenRef*0.02 },
+      ],
+      nota: "Paradoja prev→corr: buen preventivo reduce correctivos. Crecimiento vía nuevos equipos + cross-sell. Recovery $135K arrastre pendiente.",
+      riesgo: "precaucion",
+    },
+  ];
+
+  return people.map(p => {
+    const totalCom = p.streams.reduce((s, st) => s + st.monto, 0);
+    const compTotal = p.base + totalCom;
+    const compAnual = compTotal * 12;
+    const pctVariable = totalCom / compTotal * 100;
+    return { ...p, totalCom, compTotal, compAnual, pctVariable };
+  });
+}
+
+// ═══ GAMIFICATION VARIABLES CATALOG ═══
+const gameVars = [
+  { cat: "Productividad", vars: [
+    { id: "P1", nombre: "OTs completadas vs asignadas", meta: "≥95%", freq: "Diario", fuente: "Monday", publico: true, nivel: "Individual" },
+    { id: "P2", nombre: "Evidencias ANTES/DESPUÉS", meta: "100%", freq: "Diario", fuente: "DataScope", publico: true, nivel: "Individual" },
+    { id: "P3", nombre: "Tiempo ejecución vs SLA", meta: "<4h", freq: "Por OT", fuente: "Monday", publico: true, nivel: "Individual" },
+    { id: "P4", nombre: "Retrabajos/callbacks", meta: "<3%", freq: "Mensual", fuente: "Monday", publico: true, nivel: "Individual" },
+    { id: "P5", nombre: "Correctivos detectados", meta: "≥2/mes", freq: "Mensual", fuente: "Monday", publico: true, nivel: "Individual" },
+  ]},
+  { cat: "Asistencia y Puntualidad", vars: [
+    { id: "A1", nombre: "Asistencia", meta: "≥95%", freq: "Diario", fuente: "Sesame HR", publico: true, nivel: "Individual" },
+    { id: "A2", nombre: "Puntualidad", meta: "≥95%", freq: "Diario", fuente: "Sesame HR", publico: true, nivel: "Individual" },
+    { id: "A3", nombre: "Días sin falta equipo", meta: "Streak", freq: "Diario", fuente: "Sesame HR", publico: true, nivel: "Célula" },
+  ]},
+  { cat: "Evaluaciones", vars: [
+    { id: "E1", nombre: "Evaluación técnica trimestral", meta: "≥80%", freq: "Trimestral", fuente: "DataScope", publico: false, nivel: "Individual" },
+    { id: "E2", nombre: "Evaluación 360° (semestral)", meta: "≥4/5", freq: "Semestral", fuente: "Google Forms", publico: false, nivel: "Individual" },
+    { id: "E3", nombre: "Quiz capacitaciones", meta: "≥70%", freq: "Post-cap", fuente: "DataScope", publico: true, nivel: "Individual" },
+    { id: "E4", nombre: "Certificaciones DC3 vigentes", meta: "100%", freq: "Continua", fuente: "Monday", publico: true, nivel: "Individual" },
+  ]},
+  { cat: "Comercial / Revenue", vars: [
+    { id: "R1", nombre: "Detecciones correctivos", meta: "≥2/mes", freq: "Mensual", fuente: "Monday Folios", publico: true, nivel: "Individual" },
+    { id: "R2", nombre: "Revenue correctivo cerrado", meta: "Var x UN", freq: "Mensual", fuente: "NetSuite", publico: false, nivel: "UN" },
+    { id: "R3", nombre: "Refacciones vendidas", meta: "Var", freq: "Mensual", fuente: "NetSuite", publico: false, nivel: "UN" },
+    { id: "R4", nombre: "Pipeline activo", meta: ">$50K", freq: "Semanal", fuente: "Monday", publico: true, nivel: "UN" },
+  ]},
+  { cat: "Seguridad y Compliance", vars: [
+    { id: "S1", nombre: "Accidentes laborales", meta: "0", freq: "Continua", fuente: "Monday", publico: true, nivel: "Empresa" },
+    { id: "S2", nombre: "Perforaciones WM", meta: "0", freq: "Continua", fuente: "Scorecard WM", publico: true, nivel: "Empresa" },
+    { id: "S3", nombre: "Carpetas seguridad completas", meta: "100%", freq: "Mensual", fuente: "Board CR", publico: true, nivel: "Célula" },
+    { id: "S4", nombre: "Uso EPP correcto", meta: "100%", freq: "Auditoría", fuente: "DataScope", publico: true, nivel: "Individual" },
+  ]},
+  { cat: "Uso SND / Digital", vars: [
+    { id: "D1", nombre: "Reportes DataScope a tiempo", meta: "≥90%", freq: "Semanal", fuente: "DataScope", publico: true, nivel: "Individual" },
+    { id: "D2", nombre: "WhatsApp canal oficial", meta: "≥95%", freq: "Semanal", fuente: "Evolution API", publico: false, nivel: "Individual" },
+    { id: "D3", nombre: "Tablero actualizado (sups)", meta: "100%", freq: "Diario", fuente: "Monday", publico: true, nivel: "Individual" },
+  ]},
+];
+
+export default function Q360CompV2() {
+  const [tab, setTab] = useState('comisiones');
+  const [sc, setSc] = useState('base');
+  const [expandedPerson, setExpandedPerson] = useState(null);
+
+  const scenario = SC[sc];
+  const people = useMemo(() => calcCommissions(scenario), [sc]);
+  const totalAdditionalRev = scenario.correctivos + scenario.polizasNuevas + scenario.refacciones;
+  const totalCommPool = people.reduce((s, p) => s + p.totalCom, 0);
+  const totalCompMes = people.reduce((s, p) => s + p.compTotal, 0);
+
+  // Ramp-up data by month (12 months)
+  const monthlyRamp = useMemo(() => {
+    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return months.map((m, i) => {
+      const rampFactor = Math.min(1, (i + 1) / scenario.rampMonth);
+      const corrRamp = i < 2 ? scenario.correctivos * 0.7 : scenario.correctivos * Math.min(1, 0.7 + 0.3 * ((i-1) / 6));
+      const polRamp = i < 2 ? 0 : scenario.polizasNuevas * rampFactor * 0.7;
+      const refRamp = i < 3 ? scenario.refacciones * 0.3 : scenario.refacciones * rampFactor * 0.8;
+      return { mes: m, correctivos: Math.round(corrRamp), polizas: Math.round(polRamp), refacciones: Math.round(refRamp), total: Math.round(corrRamp + polRamp + refRamp) };
+    });
+  }, [sc]);
+
+  const annualRevAdditional = monthlyRamp.reduce((s, m) => s + m.total, 0);
+
+  const tabs = [
+    { key: 'comisiones', label: 'Comisiones Individuales', icon: <DollarSign size={14}/> },
+    { key: 'streams', label: '3 Revenue Streams', icon: <TrendingUp size={14}/> },
+    { key: 'gamificacion', label: 'Sistema Gamificado', icon: <Gamepad2 size={14}/> },
+    { key: 'roadmap', label: 'Próximos Pasos', icon: <Target size={14}/> },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ background: C.smoke, fontFamily: 'system-ui, sans-serif' }}>
+      {/* Header */}
+      <div className="px-6 py-4" style={{ background: C.liberty }}>
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-bold text-white">Q360 — Proyección Compensación + Gamificación 2026 v2</h1>
+              <p style={{ color: C.cyan }} className="text-xs mt-0.5">3 Revenue Streams: Correctivos + Pólizas Nuevas + Refacciones | Comisiones individuales + Sistema gamificado</p>
+            </div>
+            <div className="flex gap-2">
+              {Object.entries(SC).map(([k, v]) => (
+                <button key={k} onClick={() => setSc(k)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${sc === k ? 'text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+                  style={{ background: sc === k ? v.color : 'transparent', border: sc === k ? 'none' : '1px solid rgba(255,255,255,0.15)' }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-6 flex gap-1">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${tab === t.key ? 'border-[#4814DA] text-[#4814DA]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-5">
+
+        {/* ═══ TAB: COMISIONES INDIVIDUALES ═══ */}
+        {tab === 'comisiones' && (
+          <div className="space-y-5">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <Kpi icon={<TrendingUp size={16}/>} title="REVENUE ADICIONAL /MES" value={fmt.c(totalAdditionalRev)} sub={`Anual estimado: ${fmt.c(annualRevAdditional)}`} color={C.green} />
+              <Kpi icon={<DollarSign size={16}/>} title="POOL COMISIONES /MES" value={fmt.c(totalCommPool)} sub={`${fmt.p(totalCommPool/totalAdditionalRev*100)} del revenue adicional`} color={C.purple} />
+              <Kpi icon={<Users size={16}/>} title="COMP TOTAL 6 PERSONAS" value={fmt.c(totalCompMes)} sub={`Base + Variable combinado`} color={C.slate} />
+              <Kpi icon={<Award size={16}/>} title="MARGEN PROM POOL" value={fmt.p((scenario.margenCorr*0.4+scenario.margenPol*0.3+scenario.margenRef*0.3)*100)} sub="Ponderado 3 streams" color={C.amber} />
+              <Kpi icon={<Target size={16}/>} title="ROI COMISIONES" value={`${(totalAdditionalRev * 0.34 / totalCommPool).toFixed(1)}x`} sub="Utilidad bruta / Pool comisiones" color={totalAdditionalRev * 0.34 / totalCommPool >= 2 ? C.green : C.amber} />
+            </div>
+
+            {/* Individual Cards */}
+            {people.map((p, idx) => {
+              const isOpen = expandedPerson === idx;
+              return (
+                <div key={idx} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3 cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => setExpandedPerson(isOpen ? null : idx)}>
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: C.chart[idx] }}>
+                        {p.nombre.split(' ').map(w => w[0]).join('').slice(0,2)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-800">{p.nombre}</p>
+                        <p className="text-[10px] text-gray-500">{p.puesto} | Base: {fmt.c(p.base)}/mes</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase">Comisión Variable</p>
+                        <p className="text-sm font-bold" style={{ color: C.green }}>+{fmt.c(p.totalCom)}/mes</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase">Comp Total</p>
+                        <p className="text-sm font-bold" style={{ color: C.purple }}>{fmt.c(p.compTotal)}/mes</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase">% Variable</p>
+                        <p className="text-sm font-semibold text-gray-700">{fmt.p(p.pctVariable)}</p>
+                      </div>
+                      <div className="text-right hidden md:block">
+                        <p className="text-[10px] text-gray-400 uppercase">Anual</p>
+                        <p className="text-sm font-mono text-gray-600">{fmt.c(p.compAnual)}</p>
+                      </div>
+                      {isOpen ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div className="border-t border-gray-100 bg-gray-50 px-5 py-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Streams detail */}
+                        <div className="md:col-span-2">
+                          <p className="text-xs font-semibold text-gray-600 mb-2">Desglose por Stream de Revenue</p>
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="text-left py-1.5 font-semibold text-gray-500">Tipo</th>
+                                <th className="text-left py-1.5 font-semibold text-gray-500">Mecanismo</th>
+                                <th className="text-right py-1.5 font-semibold text-gray-500">Revenue Base</th>
+                                <th className="text-right py-1.5 font-semibold text-gray-500 whitespace-nowrap">Comisión /mes</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {p.streams.map((st, j) => (
+                                <tr key={j} className="border-b border-gray-100">
+                                  <td className="py-1.5 font-medium text-gray-700">{st.tipo}</td>
+                                  <td className="py-1.5 text-gray-500">{st.desc}</td>
+                                  <td className="py-1.5 text-right font-mono text-gray-500">{fmt.c(st.revenue)}</td>
+                                  <td className="py-1.5 text-right font-mono font-bold" style={{ color: C.green }}>{fmt.c(st.monto)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t-2 border-gray-300">
+                                <td colSpan={3} className="py-1.5 font-bold text-gray-700">TOTAL COMISIÓN VARIABLE</td>
+                                <td className="py-1.5 text-right font-mono font-bold" style={{ color: C.purple }}>{fmt.c(p.totalCom)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                        {/* Notes */}
+                        <div className="bg-white rounded-lg p-3 border border-gray-200">
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Notas y Contexto</p>
+                          <p className="text-[11px] text-gray-600 leading-relaxed">{p.nota}</p>
+                          <div className="mt-3 pt-2 border-t border-gray-100">
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div><span className="text-gray-400">Base:</span> <span className="font-mono font-bold">{fmt.c(p.base)}</span></div>
+                              <div><span className="text-gray-400">Variable:</span> <span className="font-mono font-bold text-green-600">+{fmt.c(p.totalCom)}</span></div>
+                              <div><span className="text-gray-400">Total /mes:</span> <span className="font-mono font-bold" style={{color:C.purple}}>{fmt.c(p.compTotal)}</span></div>
+                              <div><span className="text-gray-400">Total /año:</span> <span className="font-mono">{fmt.c(p.compAnual)}</span></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Comparison Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-xs font-semibold text-gray-700 mb-3">Comparativo — Base vs Variable por Persona (escenario {scenario.label})</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={people.map(p => ({ name: p.nombre.split(' ')[0], base: p.base, variable: p.totalCom }))} margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" fontSize={11} />
+                  <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}K`} fontSize={10} />
+                  <Tooltip formatter={v => fmt.c(v)} />
+                  <Bar dataKey="base" fill={C.purple} name="Base" radius={[0,0,0,0]} />
+                  <Bar dataKey="variable" fill={C.green} name="Variable" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* 3 Scenario Comparison Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-xs font-semibold text-gray-700 mb-3">Comisión Mensual por Persona — 3 Escenarios</h3>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 font-semibold text-gray-600">Persona</th>
+                    <th className="text-left py-2 font-semibold text-gray-600">Base</th>
+                    {Object.entries(SC).map(([k,v]) => (
+                      <th key={k} className={`text-right py-2 font-semibold ${sc===k ? 'text-[#4814DA]' : 'text-gray-500'}`}>Com. {v.label}</th>
+                    ))}
+                    {Object.entries(SC).map(([k,v]) => (
+                      <th key={k+'t'} className={`text-right py-2 font-semibold ${sc===k ? 'text-[#4814DA]' : 'text-gray-500'}`}>Total {v.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {['Oscar Vázquez','Jazmín Olivares','Thalía Ortiz','Jaime González','Gersom García','Jorge Argenis'].map((nombre, i) => {
+                    const allSc = Object.entries(SC).map(([k,v]) => {
+                      const pp = calcCommissions(v);
+                      const person = pp.find(p => p.nombre === nombre);
+                      return { k, com: person?.totalCom || 0, total: person?.compTotal || 0 };
+                    });
+                    const base = people.find(p => p.nombre === nombre)?.base || 0;
+                    return (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-1.5 font-medium text-gray-800">{nombre}</td>
+                        <td className="py-1.5 font-mono text-gray-500">{fmt.c(base)}</td>
+                        {allSc.map(s => (
+                          <td key={s.k} className={`py-1.5 text-right font-mono ${sc===s.k ? 'font-bold text-green-600' : 'text-gray-400'}`}>+{fmt.c(s.com)}</td>
+                        ))}
+                        {allSc.map(s => (
+                          <td key={s.k+'t'} className={`py-1.5 text-right font-mono ${sc===s.k ? 'font-bold text-[#4814DA]' : 'text-gray-400'}`}>{fmt.c(s.total)}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 font-bold">
+                    <td className="py-2" colSpan={2}>TOTAL POOL</td>
+                    {Object.entries(SC).map(([k,v]) => {
+                      const pp = calcCommissions(v);
+                      const total = pp.reduce((s,p) => s + p.totalCom, 0);
+                      return <td key={k} className={`py-2 text-right font-mono ${sc===k ? 'text-green-600' : 'text-gray-400'}`}>{fmt.c(total)}</td>;
+                    })}
+                    {Object.entries(SC).map(([k,v]) => {
+                      const pp = calcCommissions(v);
+                      const total = pp.reduce((s,p) => s + p.compTotal, 0);
+                      return <td key={k+'t'} className={`py-2 text-right font-mono ${sc===k ? 'text-[#4814DA]' : 'text-gray-400'}`}>{fmt.c(total)}</td>;
+                    })}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: 3 REVENUE STREAMS ═══ */}
+        {tab === 'streams' && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Stream 1: Correctivos */}
+              <StreamCard title="Correctivos" icon="🔧" color="#EF4444"
+                revenue={scenario.correctivos} margen={scenario.margenCorr}
+                desc="Mantenimiento correctivo en CEDIS WM — 3 UNs"
+                items={["BAT: celdas, cargadores, cables","MONTAS: llantas, frenos, hidráulico","MrCoop: campanas, compresores, línea fría"]}
+                comRate="4% revenue → 30/40/30"
+              />
+              {/* Stream 2: Pólizas */}
+              <StreamCard title="Pólizas Nuevas" icon="📋" color="#4814DA"
+                revenue={scenario.polizasNuevas} margen={scenario.margenPol}
+                desc="Contratos recurrentes nuevos con WM"
+                items={["BAT-CUAUT $189.5K ⏳","Transfers 9 CEDIS $40K-$60K","Litio 7 CEDIS $150K-$250K","Carritos (nueva línea)"]}
+                comRate="3% mensual → Jazmín primary"
+              />
+              {/* Stream 3: Refacciones */}
+              <StreamCard title="Refacciones / Artículos" icon="⚙️" color="#22C55E"
+                revenue={scenario.refacciones} margen={scenario.margenRef}
+                desc="Venta de partes y consumibles"
+                items={["Celdas de batería $32K/mes","Cables y terminales $39K","Filtros $81K","Kits Crown RC5500","18 items MrCoop multi-sistema"]}
+                comRate="2-3% margen → detector/seller"
+              />
+            </div>
+
+            {/* Ramp-Up Area Chart */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-xs font-semibold text-gray-700 mb-3">Ramp-Up Revenue Adicional 2026 — Escenario {scenario.label}</h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={monthlyRamp}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="mes" fontSize={11} />
+                  <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}K`} fontSize={10} />
+                  <Tooltip formatter={v => fmt.c(v)} />
+                  <Area type="monotone" dataKey="correctivos" stackId="1" stroke="#EF4444" fill="#EF4444" fillOpacity={0.6} name="Correctivos" />
+                  <Area type="monotone" dataKey="polizas" stackId="1" stroke="#4814DA" fill="#4814DA" fillOpacity={0.6} name="Pólizas" />
+                  <Area type="monotone" dataKey="refacciones" stackId="1" stroke="#22C55E" fill="#22C55E" fillOpacity={0.6} name="Refacciones" />
+                  <Legend wrapperStyle={{fontSize:'11px'}} />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="mt-3 grid grid-cols-4 gap-3 text-center">
+                <MiniStat label="Revenue Anual Est." value={fmt.c(annualRevAdditional)} color={C.purple} />
+                <MiniStat label="Utilidad Bruta Est." value={fmt.c(annualRevAdditional * 0.34)} color={C.green} />
+                <MiniStat label="Pool Comisiones Anual" value={fmt.c(totalCommPool * 12)} color={C.amber} />
+                <MiniStat label="ROI del Programa" value={`${(annualRevAdditional * 0.34 / (totalCommPool * 12)).toFixed(1)}x`} color={annualRevAdditional * 0.34 / (totalCommPool * 12) >= 2 ? C.green : C.amber} />
+              </div>
+            </div>
+
+            {/* Pólizas Pipeline Detail */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-xs font-semibold text-gray-700 mb-3">Pipeline Pólizas Nuevas — Status Actual</h3>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-1.5 font-semibold text-gray-500">Póliza</th>
+                    <th className="text-center py-1.5 font-semibold text-gray-500">Status</th>
+                    <th className="text-right py-1.5 font-semibold text-gray-500">Revenue /mes</th>
+                    <th className="text-right py-1.5 font-semibold text-gray-500">Margen Est.</th>
+                    <th className="text-center py-1.5 font-semibold text-gray-500">Deadline</th>
+                    <th className="text-left py-1.5 font-semibold text-gray-500">Bloqueador</th>
+                    <th className="text-left py-1.5 font-semibold text-gray-500">Comisión</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { pol: "BAT-CUAUT (COP-2026-01-0624)", st: "⏳ Firma pend.", rev: 189500, mar: "59.2%", dl: "URGENTE", bloq: "Contrato sin firmar", com: "Jazmín 3% = $5,685/mes" },
+                    { pol: "Transfers 9 CEDIS", st: "📋 En spec", rev: 50000, mar: "45-55%", dl: "31-Mar", bloq: "Inventario campo — Jaime 07-Mar", com: "Jazmín 2.5% + Jaime 0.5%" },
+                    { pol: "Baterías Litio (7 CEDIS)", st: "📋 Pre-spec", rev: 200000, mar: "35-45%", dl: "31-Mar", bloq: "Spec técnica + técnico BMS", com: "Jazmín 2.5% + Jaime 0.5%" },
+                    { pol: "Carritos (nueva línea)", st: "💡 Idea", rev: 50000, mar: "40-50%", dl: "Q2", bloq: "Sin spec — explorar", com: "Thalía 2%" },
+                  ].map((row, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      <td className="py-1.5 font-medium text-gray-700">{row.pol}</td>
+                      <td className="py-1.5 text-center">{row.st}</td>
+                      <td className="py-1.5 text-right font-mono font-bold">{fmt.c(row.rev)}</td>
+                      <td className="py-1.5 text-right text-gray-500">{row.mar}</td>
+                      <td className="py-1.5 text-center text-red-600 font-semibold">{row.dl}</td>
+                      <td className="py-1.5 text-gray-500">{row.bloq}</td>
+                      <td className="py-1.5 text-green-600 font-medium">{row.com}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: SISTEMA GAMIFICADO ═══ */}
+        {tab === 'gamificacion' && (
+          <div className="space-y-5">
+            {/* Vision Card */}
+            <div className="bg-gradient-to-r from-[#11152F] to-[#4814DA] rounded-xl p-5 text-white">
+              <div className="flex items-center gap-3 mb-3">
+                <Trophy size={24} style={{ color: C.cyan }} />
+                <h2 className="text-lg font-bold">Q360 Performance Arena — Sistema Gamificado SND</h2>
+              </div>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                Cada colaborador accede en tiempo real a su desempeño, puntaje, retos y comisiones. 
+                El sistema combina métricas individuales, de célula, de UN y empresa. 
+                Alimentado automáticamente por Monday + DataScope + Sesame HR + NetSuite vía n8n.
+              </p>
+              <div className="grid grid-cols-4 gap-3 mt-4">
+                {[
+                  { icon: <Star size={18}/>, label: "26 Variables", sub: "6 categorías tracked" },
+                  { icon: <Users size={18}/>, label: "4 Niveles", sub: "Individual → Empresa" },
+                  { icon: <Shield size={18}/>, label: "Público + Privado", sub: "Comps confidenciales" },
+                  { icon: <Zap size={18}/>, label: "Tiempo Real", sub: "n8n webhooks + Metabase" },
+                ].map((item, i) => (
+                  <div key={i} className="bg-white/10 rounded-lg p-3 text-center">
+                    <span style={{ color: C.cyan }}>{item.icon}</span>
+                    <p className="text-xs font-bold mt-1">{item.label}</p>
+                    <p className="text-[10px] text-gray-400">{item.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Variables Catalog */}
+            {gameVars.map((cat, ci) => (
+              <div key={ci} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-gray-700">{cat.cat} — {cat.vars.length} variables</h3>
+                </div>
+                <table className="w-full text-[11px]">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-1.5 px-4 font-semibold text-gray-500 w-8">ID</th>
+                      <th className="text-left py-1.5 font-semibold text-gray-500">Variable</th>
+                      <th className="text-center py-1.5 font-semibold text-gray-500">Meta</th>
+                      <th className="text-center py-1.5 font-semibold text-gray-500">Freq.</th>
+                      <th className="text-center py-1.5 font-semibold text-gray-500">Fuente</th>
+                      <th className="text-center py-1.5 font-semibold text-gray-500">Visibilidad</th>
+                      <th className="text-center py-1.5 font-semibold text-gray-500">Nivel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cat.vars.map((v, vi) => (
+                      <tr key={vi} className="border-b border-gray-50">
+                        <td className="py-1.5 px-4 font-mono text-gray-400">{v.id}</td>
+                        <td className="py-1.5 font-medium text-gray-700">{v.nombre}</td>
+                        <td className="py-1.5 text-center font-mono text-gray-600">{v.meta}</td>
+                        <td className="py-1.5 text-center text-gray-500">{v.freq}</td>
+                        <td className="py-1.5 text-center"><span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]">{v.fuente}</span></td>
+                        <td className="py-1.5 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${v.publico ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {v.publico ? 'Público' : 'Privado'}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            v.nivel === 'Individual' ? 'bg-blue-100 text-blue-700' :
+                            v.nivel === 'Célula' ? 'bg-purple-100 text-purple-700' :
+                            v.nivel === 'UN' ? 'bg-indigo-100 text-indigo-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>{v.nivel}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            {/* Gamification Mechanics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-xs font-bold text-gray-700 mb-3">Mecánicas de Juego</h3>
+                <div className="space-y-3">
+                  {[
+                    { icon: "🎯", title: "Retos Diarios", desc: "Completar 100% evidencias, 0 retrabajos, registro SND a tiempo. Auto-generados por n8n." },
+                    { icon: "📅", title: "Retos Semanales", desc: "OTs completadas vs meta, pipeline correctivos actualizado, asistencia perfecta 5/5 días." },
+                    { icon: "🏆", title: "Retos Quincenales", desc: "Top detector de correctivos, mejor tiempo SLA, streak sin falta." },
+                    { icon: "⭐", title: "Retos Mensuales", desc: "Revenue cerrado vs target, evaluación ≥4/5, 0 accidentes célula." },
+                    { icon: "🎖️", title: "Achievements", desc: "Desbloqueables: '10 correctivos seguidos', 'SLA perfecto 30 días', 'Mentor del mes', etc." },
+                    { icon: "📊", title: "Leaderboards", desc: "Individual + Célula + UN. Reset mensual. Acumulado trimestral para bono." },
+                  ].map((m, i) => (
+                    <div key={i} className="flex gap-3 items-start">
+                      <span className="text-lg">{m.icon}</span>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-700">{m.title}</p>
+                        <p className="text-[10px] text-gray-500">{m.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-xs font-bold text-gray-700 mb-3">Stack Técnico — Opciones de Interfaz</h3>
+                <div className="space-y-3">
+                  {[
+                    { opt: "Opción A: Metabase Embeds", pros: "Ya en stack, SQL nativo, dashboards interactivos, open-source", cons: "UX limitada, no gamificación nativa, requiere login", score: 7 },
+                    { opt: "Opción B: Monday + Dashboard View", pros: "SSoT ya existente, familiar para equipo, automations nativas", cons: "Licencias costosas por usuario técnico, UX no gamificable", score: 6 },
+                    { opt: "Opción C: React App Custom (Webflow/Vercel)", pros: "UX 100% personalizable, branding Q360, mobile-first, gamificación completa", cons: "Requiere desarrollo, mantenimiento, integración API", score: 9 },
+                    { opt: "Opción D: Híbrido (Metabase data + React UI)", pros: "Data layer probado + UI gamificada, deployment rápido, escalable", cons: "Dos sistemas, sincronización", score: 8 },
+                  ].map((o, i) => (
+                    <div key={i} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-bold text-gray-700">{o.opt}</p>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${o.score >= 8 ? 'bg-green-100 text-green-700' : o.score >= 7 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                          Score: {o.score}/10
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-green-600 mt-1">✅ {o.pros}</p>
+                      <p className="text-[10px] text-red-500">⚠️ {o.cons}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: PRÓXIMOS PASOS ═══ */}
+        {tab === 'roadmap' && (
+          <div className="space-y-5">
+            {/* Phase Cards */}
+            {[
+              {
+                fase: "FASE 0 — Esta Semana (03-07 Mar)", color: C.red, urgencia: "AHORA",
+                items: [
+                  { accion: "Validar estructura comisiones con Jazmín y supervisores (este doc)", owner: "OscarV", dl: "05-Mar" },
+                  { accion: "Cerrar firma BAT-CUAUT COP-2026-01-0624 ($189.5K/mes bloqueados)", owner: "OscarV + WM", dl: "07-Mar" },
+                  { accion: "Jaime: inventario baterías + litio + transfers por CEDIS", owner: "Jaime", dl: "07-Mar" },
+                  { accion: "Ajustar salarios Elizabeth ($9,582) y Sandra ($9,582)", owner: "Mario/Jazmín", dl: "05-Mar" },
+                ],
+              },
+              {
+                fase: "FASE 1 — Sprint Mar 07-21", color: C.amber, urgencia: "2 SEMANAS",
+                items: [
+                  { accion: "Diseñar cédulas de comisiones individuales (6 personas) — firmas", owner: "OscarV", dl: "14-Mar" },
+                  { accion: "Definir modelo comisiones técnicos (4% confirmado + bono zona Scorecard)", owner: "OscarV + Davis", dl: "14-Mar" },
+                  { accion: "Configurar columnas comisión en board Folios de Servicio (Monday)", owner: "Karen", dl: "14-Mar" },
+                  { accion: "Emitir cotizaciones pólizas Transfers + Litio a WM", owner: "Jazmín", dl: "14-Mar" },
+                  { accion: "Ali: cotizar stock estratégico refacciones 3 UNs", owner: "Ali", dl: "10-Mar" },
+                ],
+              },
+              {
+                fase: "FASE 2 — Sprint Mar 21 - Abr 04", color: C.purple, urgencia: "1 MES",
+                items: [
+                  { accion: "GO-LIVE comisiones: primer cálculo mensual en Monday + NetSuite", owner: "Karen + Jazmín", dl: "31-Mar" },
+                  { accion: "WF-COMM: n8n workflow cálculo comisiones automático", owner: "Karen", dl: "28-Mar" },
+                  { accion: "Firma pólizas Transfers y/o Litio con WM", owner: "OscarV + Jazmín", dl: "31-Mar" },
+                  { accion: "Spec gamificación: definir 26 variables × fuente × frecuencia × cálculo", owner: "OscarV + Karen", dl: "04-Abr" },
+                  { accion: "Elegir plataforma gamificación (Opción C o D del análisis)", owner: "OscarV + Karen", dl: "04-Abr" },
+                ],
+              },
+              {
+                fase: "FASE 3 — Abril-Mayo: Gamificación MVP", color: C.green, urgencia: "Q2",
+                items: [
+                  { accion: "Desarrollo MVP Performance Arena (8 KPIs técnicos + leaderboard)", owner: "Karen + Dev", dl: "30-Abr" },
+                  { accion: "Integración n8n: DataScope → Scorecard → Metabase/App", owner: "Karen", dl: "30-Abr" },
+                  { accion: "Piloto con UN Montacargas (6 técnicos, scope controlable)", owner: "Gersom + Karen", dl: "15-May" },
+                  { accion: "Nine-Box Grid: primera evaluación semestral pre-prod", owner: "Mario + OscarV", dl: "31-May" },
+                  { accion: "Evaluación Reyna 90 días → decisión contrato + activar bonos", owner: "OscarV", dl: "~10-May" },
+                ],
+              },
+              {
+                fase: "FASE 4 — Junio-Julio: Rollout Completo", color: C.cyan, urgencia: "H2",
+                items: [
+                  { accion: "Rollout Performance Arena a las 3 UNs (51 técnicos)", owner: "Karen + Sups", dl: "30-Jun" },
+                  { accion: "Primera evaluación Nine-Box Grid formal (Performance × Values)", owner: "OscarV + Mario", dl: "01-Jul" },
+                  { accion: "Primer pago bono trimestral Q2 basado en data real", owner: "Jazmín", dl: "15-Jul" },
+                  { accion: "Dashboard CEO: comisiones pagadas vs revenue generado (ROI real)", owner: "Davis + Karen", dl: "31-Jul" },
+                ],
+              },
+            ].map((fase, fi) => (
+              <div key={fi} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="px-5 py-2.5 flex items-center justify-between" style={{ background: fase.color + '10', borderBottom: `2px solid ${fase.color}` }}>
+                  <h3 className="text-xs font-bold" style={{ color: fase.color }}>{fase.fase}</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ background: fase.color }}>{fase.urgencia}</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {fase.items.map((item, ii) => (
+                    <div key={ii} className="px-5 py-2 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="w-5 h-5 rounded-full border-2 flex-shrink-0" style={{ borderColor: fase.color }}></span>
+                        <p className="text-[11px] text-gray-700">{item.accion}</p>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <span className="text-[10px] text-gray-500 font-medium">{item.owner}</span>
+                        <span className="text-[10px] font-mono font-semibold" style={{ color: fase.color }}>{item.dl}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* Conclusiones */}
+            <div className="bg-gradient-to-r from-[#11152F] to-[#4814DA] rounded-xl p-5 text-white">
+              <h3 className="text-sm font-bold mb-3" style={{ color: C.cyan }}>Conclusiones Clave</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-300 leading-relaxed">
+                <div>
+                  <p className="font-semibold text-white mb-1">1. Los 3 streams se autofinancian</p>
+                  <p>Con {fmt.c(totalAdditionalRev)}/mes de revenue adicional y un pool de comisiones de {fmt.c(totalCommPool)}/mes, el ROI es {(totalAdditionalRev * 0.34 / totalCommPool).toFixed(1)}x. Cada peso en comisiones genera {(totalAdditionalRev * 0.34 / totalCommPool).toFixed(0)} pesos de utilidad.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-white mb-1">2. Jazmín es la pieza central de pólizas</p>
+                  <p>Con potencial de {fmt.c(calcCommissions(SC.optimista).find(p=>p.nombre==='Jazmín Olivares')?.totalCom || 0)}/mes en comisiones (escenario optimista), su comp total llegaría a ~{fmt.c(40000 + (calcCommissions(SC.optimista).find(p=>p.nombre==='Jazmín Olivares')?.totalCom || 0))}, acercándose a P50 sin ajustar su base.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-white mb-1">3. Eliminar topes de supervisores</p>
+                  <p>El tope de $3K/mes limitaba el incentivo. Con 3 streams uncapped, cada supervisor puede ganar {fmt.c(7000)}-{fmt.c(12000)}/mes extra, llevando su comp a $24K-$29K, competitivo en P75 del mercado.</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-white mb-1">4. Gamificación = visibilidad + tracción</p>
+                  <p>26 variables, 4 niveles de competencia, retos diarios/semanales/mensuales. El Performance Arena hace que cada técnico sepa exactamente qué medir y cuánto puede ganar, en tiempo real.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ icon, title, value, sub, color = C.slate }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3.5">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-gray-400">{icon}</span>
+        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
+      </div>
+      <p className="text-lg font-bold" style={{ color }}>{value}</p>
+      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function StreamCard({ title, icon, color, revenue, margen, desc, items, comRate }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xl">{icon}</span>
+        <h3 className="text-sm font-bold text-gray-800">{title}</h3>
+      </div>
+      <p className="text-2xl font-bold" style={{ color }}>{fmt.c(revenue)}<span className="text-xs text-gray-400 font-normal">/mes</span></p>
+      <p className="text-[10px] text-gray-500 mt-1">Margen: {fmt.p(margen * 100)} | Utilidad: {fmt.c(revenue * margen)}/mes</p>
+      <p className="text-xs text-gray-600 mt-2">{desc}</p>
+      <div className="mt-3 space-y-1">
+        {items.map((item, i) => (
+          <p key={i} className="text-[10px] text-gray-500 flex items-center gap-1.5">
+            <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: color }}></span>
+            {item}
+          </p>
+        ))}
+      </div>
+      <div className="mt-3 pt-2 border-t border-gray-100">
+        <p className="text-[10px] font-semibold" style={{ color }}>Comisión: {comRate}</p>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, color }) {
+  return (
+    <div className="bg-gray-50 rounded-lg p-2">
+      <p className="text-[9px] text-gray-400 uppercase">{label}</p>
+      <p className="text-sm font-bold" style={{ color }}>{value}</p>
+    </div>
+  );
+}
