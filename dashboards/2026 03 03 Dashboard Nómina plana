@@ -1,0 +1,568 @@
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, ScatterChart, Scatter, ZAxis, ReferenceLine } from "recharts";
+import { AlertTriangle, Users, DollarSign, TrendingUp, Shield, ChevronDown, ChevronUp, Filter } from "lucide-react";
+
+const COLORS = {
+  purplishBlue: '#4814DA',
+  liberty: '#11152F',
+  whiteSmoke: '#F5F5F5',
+  electricLemonade: '#5FDAF4',
+  success: '#22C55E',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  info: '#475569',
+  chartColors: ['#4814DA', '#5FDAF4', '#D946EF', '#F43F5E', '#6366F1', '#22C55E'],
+};
+
+const fmt = {
+  currency: (n) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+  percent: (n) => `${Number(n).toFixed(1)}%`,
+};
+
+const SALARIO_MINIMO = 9582;
+
+// Complete payroll data
+const STAFF = [
+  { nombre: "Jazmín Olivares", puesto: "Gte Operaciones", neto: 54683, area: "Staff", entidad: "NM", p50: 35000, nivel: "M3", celula: "TODOS" },
+  { nombre: "Karen Álvarez", puesto: "POD / Full Stack", neto: 24428, area: "Staff", entidad: "NM", p50: 55000, nivel: "M3", celula: "TODOS" },
+  { nombre: "Ali Picazo", puesto: "Compras", neto: 24428, area: "Staff", entidad: "NM", p50: 13000, nivel: "M2", celula: "TODOS" },
+  { nombre: "Mario Torrero", puesto: "Coord. RH", neto: 24428, area: "Staff", entidad: "NM", p50: 10500, nivel: "M2", celula: "TODOS" },
+  { nombre: "Thalía Ortiz", puesto: "CxC / SAC", neto: 19115, area: "Staff", entidad: "NM", p50: 16000, nivel: "M2", celula: "TODOS" },
+  { nombre: "Pedro Núñez", puesto: "Facility Manager", neto: 12168, area: "Staff", entidad: "MR", p50: 13000, nivel: "IC4", celula: "TODOS" },
+  { nombre: "Elizabeth Falcón", puesto: "Staff Limpieza", neto: 9206, area: "Staff", entidad: "MR", p50: 9582, nivel: "IC1", celula: "TODOS" },
+  { nombre: "Oscar Vázquez", puesto: "CEO", neto: 8242, area: "Staff", entidad: "NM", p50: 80000, nivel: "E1", celula: "TODOS" },
+  { nombre: "Sandra Villada", puesto: "Community Mgr", neto: 8235, area: "Staff", entidad: "MR", p50: 13000, nivel: "IC2", celula: "TODOS" },
+];
+
+const SUPERVISORES = [
+  { nombre: "Jaime González", puesto: "Supervisor BAT", neto: 17871, area: "Supervisor", entidad: "NM", p50: 17000, nivel: "M1", celula: "BAT-VARIOS", tecRatio: "1:32" },
+  { nombre: "Jorge Argenis", puesto: "Supervisor COM", neto: 17871, area: "Supervisor", entidad: "MR", p50: 17000, nivel: "M1", celula: "COM-VARIOS", tecRatio: "1:14" },
+  { nombre: "Gersom García", puesto: "Supervisor MONTA", neto: 16950, area: "Supervisor", entidad: "NM", p50: 17000, nivel: "M1", celula: "MONTA", tecRatio: "1:6" },
+  { nombre: "Martha Batún", puesto: "Sup. Seg. Higiene", neto: 13050, area: "Supervisor", entidad: "MR", p50: 17000, nivel: "M1", celula: "AC-CUAUTITLAN", tecRatio: "N/A", nota: "BAJA - Reemplazada por Reyna" },
+];
+
+const TECNICOS = [
+  { nombre: "Javier Verduzco", puesto: "Téc. Mantenimiento", neto: 20640, area: "Técnico", entidad: "MR", celula: "COM-MÓVIL", p50: 14000 },
+  { nombre: "Juan Martínez Z.", puesto: "Jefe de Unidad AC", neto: 15337, area: "Técnico", entidad: "MR", celula: "AC-CUAUTITLAN", p50: 14000 },
+  { nombre: "Efraín Lucas", puesto: "Jefe de Unidad", neto: 14950, area: "Técnico", entidad: "NM", celula: "MONTA-PREV2", p50: 14000 },
+  { nombre: "Juan Higareda", puesto: "Téc. Electromecánico", neto: 13824, area: "Técnico", entidad: "MR", celula: "RPC-GDL", p50: 14000 },
+  { nombre: "Guillermo Basurto", puesto: "Téc. Electromecánico", neto: 13447, area: "Técnico", entidad: "MR", celula: "RPC-SMO", p50: 14000 },
+  { nombre: "Rodrigo Chávez", puesto: "Téc. Unidad Montas", neto: 13436, area: "Técnico", entidad: "NM", celula: "MONTA-PREV1", p50: 14000 },
+  { nombre: "Alexis Vega", puesto: "Jefe de Unidad COM", neto: 13000, area: "Técnico", entidad: "MR", celula: "COM-MÓVIL", p50: 14000 },
+  { nombre: "Nahum Caraveo", puesto: "Ayudante Gral.", neto: 12260, area: "Técnico", entidad: "NM", celula: "BAT-MERIDA", p50: 10000 },
+  { nombre: "Gamaliel Hernández", puesto: "Téc. Unidad BAT", neto: 11527, area: "Técnico", entidad: "NM", celula: "BAT-CHALCO", p50: 14000 },
+  { nombre: "Mariel Pablo", puesto: "Jefe Unidad ELEC", neto: 11503, area: "Técnico", entidad: "NM", celula: "ELEC-VHSA", p50: 14000 },
+  { nombre: "Claudio Domínguez", puesto: "Téc. Unidad Montas", neto: 11500, area: "Técnico", entidad: "NM", celula: "MONTA-CORR", p50: 14000 },
+  { nombre: "José A. Verduzco", puesto: "Ayudante Gral. C", neto: 11337, area: "Técnico", entidad: "MR", celula: "COM-MÓVIL", p50: 10000 },
+  { nombre: "Yonathan García", puesto: "Téc. Unidad VHSA", neto: 10714, area: "Técnico", entidad: "NM", celula: "BAT-VSHA-SEC", p50: 14000 },
+  { nombre: "Ma. Guadalupe Cruz", puesto: "Jefe Unidad JW", neto: 10714, area: "Técnico", entidad: "NM", celula: "BAT-JW", p50: 14000 },
+  { nombre: "Gilmer Calderón", puesto: "Jefe Unidad MER", neto: 10714, area: "Técnico", entidad: "NM", celula: "BAT-MERIDA", p50: 14000 },
+  { nombre: "Gabriel Álvarez", puesto: "Jefe Unidad M10", neto: 10700, area: "Técnico", entidad: "NM", celula: "BAT-MEGA10", p50: 14000 },
+  { nombre: "Yeison Ortiz", puesto: "Ayudante Gral. C", neto: 10658, area: "Técnico", entidad: "NM", celula: "MONTA-CORR", p50: 10000 },
+  { nombre: "Jesús Méndez", puesto: "Téc. Refrigeración", neto: 10658, area: "Técnico", entidad: "MR", celula: "COM-MÓVIL", p50: 14000 },
+  { nombre: "Adrián Martínez", puesto: "Jefe Unidad SMO", neto: 10370, area: "Técnico", entidad: "NM", celula: "BAT-SMO", p50: 14000 },
+  { nombre: "Rodrigo Granados", puesto: "Ayudante Gral. C", neto: 10251, area: "Técnico", entidad: "MR", celula: "RPC-SMO", p50: 10000 },
+  { nombre: "María F. Muñoz", puesto: "Téc. Unidad Montas", neto: 9893, area: "Técnico", entidad: "NM", celula: "MONTA-PREV1", p50: 14000 },
+  { nombre: "Jesús Jahir Rivera", puesto: "Jefe Unidad M7y8", neto: 9409, area: "Técnico", entidad: "NM", celula: "BAT-MEGA7y8", p50: 14000 },
+  { nombre: "Carlos González V.", puesto: "Ayudante Gral. B", neto: 9109, area: "Técnico", entidad: "NM", celula: "BAT-MEGA10", p50: 10000 },
+  { nombre: "Orlando Jiménez", puesto: "Ayudante Gral. B", neto: 9109, area: "Técnico", entidad: "NM", celula: "BAT-SBB", p50: 10000 },
+  { nombre: "Javier Frías", puesto: "Téc. Unidad VHSA", neto: 9104, area: "Técnico", entidad: "NM", celula: "BAT-VSHA-SEC", p50: 14000 },
+  { nombre: "Eduardo Castañeda", puesto: "Ayudante Gral. A", neto: 8887, area: "Técnico", entidad: "NM", celula: "BAT-CHALCO", p50: 10000 },
+  { nombre: "Edgar Murillo", puesto: "Ayudante Gral.", neto: 8800, area: "Técnico", entidad: "NM", celula: "BAT-MERIDA", p50: 10000 },
+  { nombre: "Adriana Yerves", puesto: "Ayudante Gral.", neto: 8800, area: "Técnico", entidad: "NM", celula: "BAT-MERIDA", p50: 10000 },
+  { nombre: "Hanna López", puesto: "Ayudante Gral. A", neto: 8615, area: "Técnico", entidad: "MR", celula: "AC-CUAUTITLAN", p50: 10000 },
+  { nombre: "Viridiana Reséndiz", puesto: "Ayudante Gral. A", neto: 8615, area: "Técnico", entidad: "NM", celula: "BAT-SMO", p50: 10000 },
+  { nombre: "Marcelo Bolainas", puesto: "Ayudante Gral. A", neto: 8615, area: "Técnico", entidad: "NM", celula: "BAT-VSHA-SEC", p50: 10000 },
+  { nombre: "Gustavo Rodríguez", puesto: "Ayudante Gral. A", neto: 8573, area: "Técnico", entidad: "MR", celula: "AC-CUAUTITLAN", p50: 10000 },
+  { nombre: "Ernesto Rivera", puesto: "Ayudante Gral. A", neto: 8418, area: "Técnico", entidad: "NM", celula: "BAT-CHALCO", p50: 10000 },
+  { nombre: "Miguel Carrillo", puesto: "Ayudante Gral.", neto: 8415, area: "Técnico", entidad: "NM", celula: "BAT-MERIDA", p50: 10000 },
+  { nombre: "Alejandro Vásquez", puesto: "Ayudante Gral. A", neto: 8330, area: "Técnico", entidad: "NM", celula: "BAT-CHALCO", p50: 10000 },
+  { nombre: "Jesús Sánchez", puesto: "Aux. Mantenimiento", neto: 8330, area: "Técnico", entidad: "NM", celula: "BAT-VHSA-PERE", p50: 10000 },
+  { nombre: "Jesús Zapata", puesto: "Téc. Unidad PERE", neto: 8330, area: "Técnico", entidad: "NM", celula: "BAT-VHSA-PERE", p50: 14000 },
+  { nombre: "José Luis Alavez", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-SMO", p50: 10000 },
+  { nombre: "Ricardo Andrade", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-SMO", p50: 10000 },
+  { nombre: "Mariano Gómez", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-MEGA7y8", p50: 10000 },
+  { nombre: "Jonathan González", puesto: "Ayudante Gral. C", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-MEGA10", p50: 10000 },
+  { nombre: "Bryan Miranda", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-SBB", p50: 10000 },
+  { nombre: "Silvia Ruvalcaba", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-SMO", p50: 10000 },
+  { nombre: "Juan A. Guerrero", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "BAT-CHALCO", p50: 10000 },
+  { nombre: "Oscar Gordillo", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "NM", celula: "MONTA-PREV2", p50: 10000 },
+  { nombre: "Saúl Y. Lucas", puesto: "Ayudante Gral.", neto: 8242, area: "Técnico", entidad: "MR", celula: "COM-MÓVIL", p50: 10000 },
+];
+
+const ALL_EMPLOYEES = [...STAFF, ...SUPERVISORES.filter(s => !s.nota), ...TECNICOS];
+
+// Cell profitability data
+const CELULAS_DATA = [
+  { celula: "BAT-Mega10", ingresos: 116793, nomina: 55063, supervision: 2402, gastos: 7570, utilidad: 51757 },
+  { celula: "BAT-Mega7y8", ingresos: 75900, nomina: 28425, supervision: 2402, gastos: 5593, utilidad: 39480 },
+  { celula: "BAT-JW", ingresos: 51160, nomina: 16276, supervision: 2402, gastos: 3653, utilidad: 28829 },
+  { celula: "BAT-SMO", ingresos: 176614, nomina: 66347, supervision: 2402, gastos: 15939, utilidad: 91926 },
+  { celula: "BAT-Chalco", ingresos: 141430, nomina: 71783, supervision: 2402, gastos: 6558, utilidad: 60687 },
+  { celula: "BAT-SBB", ingresos: 62100, nomina: 26725, supervision: 2402, gastos: 2679, utilidad: 30294 },
+  { celula: "BAT-VSHA-Secos", ingresos: 87620, nomina: 36645, supervision: 2402, gastos: 1427, utilidad: 47146 },
+  { celula: "BAT-VSHA-Pere", ingresos: 102330, nomina: 35491, supervision: 2402, gastos: 1427, utilidad: 63009 },
+  { celula: "BAT-Merida", ingresos: 94160, nomina: 59236, supervision: 2402, gastos: 3213, utilidad: 29309 },
+  { celula: "ELEC-VHSA", ingresos: 33000, nomina: 34000, supervision: 2402, gastos: 239, utilidad: -3641 },
+  { celula: "MONTA-Corr", ingresos: 94961, nomina: 16120, supervision: 8194, gastos: 3219, utilidad: 67428 },
+  { celula: "MONTA-Prev1", ingresos: 94961, nomina: 34624, supervision: 8194, gastos: 8003, utilidad: 44140 },
+  { celula: "MONTA-Prev2", ingresos: 94961, nomina: 34465, supervision: 8194, gastos: 9016, utilidad: 43285 },
+  { celula: "AC-Cuautitlan", ingresos: 157475, nomina: 92100, supervision: 3347, gastos: 1557, utilidad: 60471 },
+  { celula: "COM-Culiacán", ingresos: 29569, nomina: 14418, supervision: 3347, gastos: 493, utilidad: 11311 },
+  { celula: "COM-Tepozpark", ingresos: 93362, nomina: 14418, supervision: 3347, gastos: 493, utilidad: 75104 },
+  { celula: "COM-Megapark", ingresos: 67767, nomina: 14418, supervision: 3347, gastos: 493, utilidad: 49509 },
+  { celula: "COM-SBB/BAE", ingresos: 90000, nomina: 14418, supervision: 3347, gastos: 493, utilidad: 71742 },
+  { celula: "COM-SMO", ingresos: 27492, nomina: 15560, supervision: 3347, gastos: 1330, utilidad: 7255 },
+  { celula: "COM-Chalco", ingresos: 50789, nomina: 14418, supervision: 3347, gastos: 493, utilidad: 32531 },
+  { celula: "RPC-SMO", ingresos: 42132, nomina: 23340, supervision: 3347, gastos: 837, utilidad: 14608 },
+  { celula: "RPC-GDL", ingresos: 56864, nomina: 26357, supervision: 3347, gastos: 1270, utilidad: 25890 },
+];
+
+const SummaryCard = ({ title, value, subtitle, icon: Icon, color = COLORS.purplishBlue, alert }) => (
+  <div className={`bg-white rounded-xl shadow-sm border ${alert ? 'border-red-200' : 'border-gray-100'} p-4`}>
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{title}</p>
+        <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
+        {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
+      </div>
+      {Icon && <Icon size={20} className="text-gray-300" />}
+    </div>
+  </div>
+);
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 text-xs">
+      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }} className="font-medium">
+          {p.name}: {fmt.currency(p.value)}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+export default function NominaDashboard() {
+  const [activeTab, setActiveTab] = useState("resumen");
+  const [filterArea, setFilterArea] = useState("Todos");
+  const [filterEntidad, setFilterEntidad] = useState("Todas");
+  const [sortBy, setSortBy] = useState("neto");
+  const [sortDir, setSortDir] = useState("desc");
+  const [showMinAlert, setShowMinAlert] = useState(false);
+
+  const filteredEmployees = useMemo(() => {
+    let data = ALL_EMPLOYEES;
+    if (filterArea !== "Todos") data = data.filter(e => e.area === filterArea);
+    if (filterEntidad !== "Todas") data = data.filter(e => e.entidad === filterEntidad);
+    if (showMinAlert) data = data.filter(e => e.neto < SALARIO_MINIMO);
+    return [...data].sort((a, b) => sortDir === "desc" ? b[sortBy] - a[sortBy] : a[sortBy] - b[sortBy]);
+  }, [filterArea, filterEntidad, sortBy, sortDir, showMinAlert]);
+
+  const stats = useMemo(() => {
+    const all = ALL_EMPLOYEES;
+    const totalNeto = all.reduce((s, e) => s + e.neto, 0);
+    const underMin = all.filter(e => e.neto < SALARIO_MINIMO);
+    const overMarket = all.filter(e => e.neto > e.p50 * 1.2 && e.puesto !== "CEO");
+    const underMarket = all.filter(e => e.neto < e.p50 * 0.9 && e.puesto !== "CEO");
+    const nmCount = all.filter(e => e.entidad === "NM").length;
+    const mrCount = all.filter(e => e.entidad === "MR").length;
+    const avgNeto = totalNeto / all.length;
+    const presupuestoNomina = 1286215; // From P&L
+    const costoAjusteMin = underMin.reduce((s, e) => s + Math.max(0, SALARIO_MINIMO - e.neto), 0);
+    return { totalNeto, underMin, overMarket, underMarket, nmCount, mrCount, avgNeto, presupuestoNomina, costoAjusteMin, total: all.length };
+  }, []);
+
+  // Distribution by area
+  const areaDistribution = useMemo(() => {
+    const areas = {};
+    ALL_EMPLOYEES.forEach(e => {
+      if (!areas[e.area]) areas[e.area] = { area: e.area, count: 0, totalNeto: 0 };
+      areas[e.area].count++;
+      areas[e.area].totalNeto += e.neto;
+    });
+    return Object.values(areas);
+  }, []);
+
+  // Market comparison scatter data
+  const marketComparison = useMemo(() => {
+    return STAFF.filter(e => e.puesto !== "CEO").map(e => ({
+      ...e,
+      variacion: ((e.neto - e.p50) / e.p50 * 100),
+    }));
+  }, []);
+
+  // P&L data
+  const plData = {
+    ingresos: 2530089,
+    nomina: 1286215,
+    compras: 209179,
+    gastosAdmin: 520837,
+    gastosFinancieros: 25000,
+    utilidad: 488858,
+  };
+
+  const tabs = [
+    { id: "resumen", label: "Resumen Ejecutivo" },
+    { id: "detalle", label: "Detalle Nómina" },
+    { id: "mercado", label: "vs. Mercado" },
+    { id: "celulas", label: "Costo por Célula" },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: COLORS.whiteSmoke, fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {/* Header */}
+      <div className="px-6 py-4" style={{ backgroundColor: COLORS.liberty }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-white">Análisis de Nómina Q360</h1>
+            <p className="text-xs" style={{ color: COLORS.electricLemonade }}>Base: Quincena Sept 2025 | 59 empleados registrados | Presupuesto 2026</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-400">Nómina NETO mensual</p>
+            <p className="text-xl font-bold text-white">{fmt.currency(stats.totalNeto)}</p>
+          </div>
+        </div>
+        {/* Tabs */}
+        <div className="flex gap-1 mt-3">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === t.id ? 'text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+              style={activeTab === t.id ? { backgroundColor: COLORS.purplishBlue } : {}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4 max-w-full">
+        {/* RESUMEN TAB */}
+        {activeTab === "resumen" && (
+          <div className="space-y-4">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <SummaryCard title="Total Empleados" value={stats.total} subtitle={`NM: ${stats.nmCount} | MR: ${stats.mrCount}`} icon={Users} color={COLORS.purplishBlue} />
+              <SummaryCard title="Neto Mensual Total" value={fmt.currency(stats.totalNeto)} subtitle={`Presupuesto: ${fmt.currency(stats.presupuestoNomina)}`} icon={DollarSign} color={COLORS.purplishBlue} />
+              <SummaryCard title="Promedio NETO" value={fmt.currency(stats.avgNeto)} subtitle="Por empleado" icon={TrendingUp} color={COLORS.info} />
+              <SummaryCard title="Bajo Mínimo Legal" value={`${stats.underMin.length} empleados`} subtitle={`Costo ajuste: ${fmt.currency(stats.costoAjusteMin)}/mes`} icon={AlertTriangle} color={COLORS.error} alert={true} />
+            </div>
+
+            {/* Alert Banner */}
+            {stats.underMin.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle size={16} className="text-red-500" />
+                  <span className="text-sm font-semibold text-red-700">Alerta: {stats.underMin.length} empleados bajo salario mínimo 2026 ({fmt.currency(SALARIO_MINIMO)}/mes)</span>
+                </div>
+                <p className="text-xs text-red-600">
+                  Costo incremental para regularizar: <strong>{fmt.currency(stats.costoAjusteMin)}/mes</strong> ({fmt.currency(stats.costoAjusteMin * 12)}/año). 
+                  Excluyendo a Oscar (CEO con compensación vía utilidades), son {stats.underMin.filter(e => e.puesto !== "CEO").length} posiciones con riesgo legal.
+                </p>
+              </div>
+            )}
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Distribution by Area */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Distribución Nómina por Área</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={areaDistribution} dataKey="totalNeto" nameKey="area" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2}>
+                      {areaDistribution.map((_, i) => <Cell key={i} fill={COLORS.chartColors[i % COLORS.chartColors.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmt.currency(v)} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* P&L Waterfall */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Estructura P&L Mensual (Presupuesto)</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={[
+                    { name: "Ingresos", valor: plData.ingresos, fill: COLORS.success },
+                    { name: "Nómina", valor: plData.nomina, fill: COLORS.error },
+                    { name: "Compras", valor: plData.compras, fill: COLORS.warning },
+                    { name: "Gastos Adm", valor: plData.gastosAdmin, fill: '#F43F5E' },
+                    { name: "Utilidad", valor: plData.utilidad, fill: COLORS.purplishBlue },
+                  ]} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}K`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="valor" radius={[4, 4, 0, 0]}>
+                      {[COLORS.success, COLORS.error, COLORS.warning, '#F43F5E', COLORS.purplishBlue].map((c, i) => <Cell key={i} fill={c} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <p className="text-xs text-gray-400 mt-1 text-center">
+                  Nómina = {fmt.percent(plData.nomina / plData.ingresos * 100)} de ingresos | Utilidad = {fmt.percent(plData.utilidad / plData.ingresos * 100)}
+                </p>
+              </div>
+            </div>
+
+            {/* Presupuesto vs Real */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Variación: Nómina Real vs Presupuesto</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-gray-500">Nómina NETO Real</p>
+                  <p className="text-lg font-bold" style={{ color: COLORS.purplishBlue }}>{fmt.currency(stats.totalNeto)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Presupuesto Mensual</p>
+                  <p className="text-lg font-bold text-gray-700">{fmt.currency(stats.presupuestoNomina)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Variación</p>
+                  <p className={`text-lg font-bold ${stats.totalNeto < stats.presupuestoNomina ? 'text-green-600' : 'text-red-600'}`}>
+                    {fmt.currency(stats.totalNeto - stats.presupuestoNomina)}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {fmt.percent((stats.totalNeto - stats.presupuestoNomina) / stats.presupuestoNomina * 100)}
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-3 bg-gray-50 p-2 rounded">
+                Nota: La nómina NETO real ($721K) es menor al presupuesto ($1.29M) porque el presupuesto incluye costo social patronal, IMSS, RCV, INFONAVIT e ISN que no se reflejan en el neto al empleado.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* DETALLE TAB */}
+        {activeTab === "detalle" && (
+          <div className="space-y-3">
+            {/* Filters */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Filter size={14} className="text-gray-400" />
+              <select value={filterArea} onChange={e => setFilterArea(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                <option value="Todos">Todas las áreas</option>
+                <option value="Staff">Staff</option>
+                <option value="Supervisor">Supervisores</option>
+                <option value="Técnico">Técnicos</option>
+              </select>
+              <select value={filterEntidad} onChange={e => setFilterEntidad(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                <option value="Todas">Todas entidades</option>
+                <option value="NM">NM Limited</option>
+                <option value="MR">MR Coop</option>
+              </select>
+              <button onClick={() => setShowMinAlert(!showMinAlert)}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
+                  showMinAlert ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-gray-200 text-gray-600'
+                }`}>
+                {showMinAlert ? '✕ ' : ''}Bajo mínimo ({stats.underMin.length})
+              </button>
+              <span className="text-xs text-gray-400 ml-auto">{filteredEmployees.length} registros</span>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ backgroundColor: COLORS.purplishBlue }}>
+                    {[
+                      { key: "nombre", label: "Nombre" },
+                      { key: "puesto", label: "Puesto" },
+                      { key: "area", label: "Área" },
+                      { key: "entidad", label: "Entidad" },
+                      { key: "neto", label: "NETO Real" },
+                      { key: "p50", label: "P50 Mercado" },
+                      { key: "variacion", label: "Variación" },
+                      { key: "status", label: "Status" },
+                    ].map(col => (
+                      <th key={col.key} className="px-3 py-2.5 text-left text-white font-medium cursor-pointer select-none"
+                        onClick={() => {
+                          if (col.key === "status" || col.key === "variacion") return;
+                          if (sortBy === col.key) setSortDir(d => d === "desc" ? "asc" : "desc");
+                          else { setSortBy(col.key); setSortDir("desc"); }
+                        }}>
+                        <span className="flex items-center gap-1">
+                          {col.label}
+                          {sortBy === col.key && (sortDir === "desc" ? <ChevronDown size={12} /> : <ChevronUp size={12} />)}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEmployees.map((e, i) => {
+                    const variacion = ((e.neto - e.p50) / e.p50 * 100);
+                    const underMin = e.neto < SALARIO_MINIMO;
+                    const overMkt = variacion > 20 && e.puesto !== "CEO";
+                    const underMkt = variacion < -10 && e.puesto !== "CEO";
+                    let statusColor = COLORS.success;
+                    let statusLabel = "OK";
+                    if (underMin && e.puesto !== "CEO") { statusColor = COLORS.error; statusLabel = "RIESGO LEGAL"; }
+                    else if (underMkt) { statusColor = COLORS.warning; statusLabel = "BAJO MKT"; }
+                    else if (overMkt) { statusColor = '#6366F1'; statusLabel = "SOBRE MKT"; }
+                    return (
+                      <tr key={i} className={`border-b border-gray-50 ${underMin && e.puesto !== "CEO" ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <td className="px-3 py-2 font-medium text-gray-800">{e.nombre}</td>
+                        <td className="px-3 py-2 text-gray-600">{e.puesto}</td>
+                        <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          e.area === 'Staff' ? 'bg-purple-100 text-purple-700' : e.area === 'Supervisor' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                        }`}>{e.area}</span></td>
+                        <td className="px-3 py-2 text-gray-500">{e.entidad}</td>
+                        <td className="px-3 py-2 font-semibold" style={{ color: underMin ? COLORS.error : COLORS.liberty }}>{fmt.currency(e.neto)}</td>
+                        <td className="px-3 py-2 text-gray-500">{fmt.currency(e.p50)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`font-medium ${variacion >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {variacion >= 0 ? '+' : ''}{variacion.toFixed(0)}%
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium" 
+                            style={{ backgroundColor: `${statusColor}15`, color: statusColor }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }}></span>
+                            {statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* MERCADO TAB */}
+        {activeTab === "mercado" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">Staff Corporativo: NETO Real vs P50 Mercado</h3>
+              <p className="text-xs text-gray-400 mb-3">Excluye CEO (compensación vía utilidades distorsiona la comparación)</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={marketComparison.sort((a, b) => b.neto - a.neto)} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}K`} />
+                  <YAxis type="category" dataKey="nombre" tick={{ fontSize: 10 }} width={95} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="neto" name="NETO Real" fill={COLORS.purplishBlue} radius={[0, 4, 4, 0]} barSize={14} />
+                  <Bar dataKey="p50" name="P50 Mercado" fill={COLORS.electricLemonade} radius={[0, 4, 4, 0]} barSize={14} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Risk Analysis Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-red-50 rounded-xl border border-red-200 p-4">
+                <h4 className="text-xs font-bold text-red-700 uppercase mb-2">Riesgo: Bajo Mercado</h4>
+                {stats.underMarket.map((e, i) => (
+                  <div key={i} className="flex justify-between text-xs py-1 border-b border-red-100 last:border-0">
+                    <span className="text-red-800 font-medium">{e.nombre}</span>
+                    <span className="text-red-600">{fmt.percent((e.neto - e.p50) / e.p50 * 100)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-purple-50 rounded-xl border border-purple-200 p-4">
+                <h4 className="text-xs font-bold text-purple-700 uppercase mb-2">Sobre Mercado (+20%)</h4>
+                {stats.overMarket.map((e, i) => (
+                  <div key={i} className="flex justify-between text-xs py-1 border-b border-purple-100 last:border-0">
+                    <span className="text-purple-800 font-medium">{e.nombre}</span>
+                    <span className="text-purple-600">+{fmt.percent((e.neto - e.p50) / e.p50 * 100)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                <h4 className="text-xs font-bold text-amber-700 uppercase mb-2">Acciones Inmediatas</h4>
+                <div className="space-y-2 text-xs text-amber-900">
+                  <p><strong>1.</strong> Regularizar Elizabeth + Sandra al mínimo ($9,582)</p>
+                  <p><strong>2.</strong> Plan Karen → P50 en 3 trimestres ($33K → $45K)</p>
+                  <p><strong>3.</strong> Documentar justificación Mario/Ali como funciones expandidas</p>
+                  <p><strong>4.</strong> Tabulador técnicos por célula Q2 2026</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CELULAS TAB */}
+        {activeTab === "celulas" && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Peso de Nómina vs Ingresos por Célula</h3>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={CELULAS_DATA.sort((a, b) => (b.nomina / b.ingresos) - (a.nomina / a.ingresos))} margin={{ top: 5, right: 10, left: 10, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="celula" tick={{ fontSize: 8, angle: -45, textAnchor: 'end' }} interval={0} height={70} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}K`} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="ingresos" name="Ingresos" fill={COLORS.electricLemonade} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="nomina" name="Nómina" fill={COLORS.purplishBlue} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="utilidad" name="Utilidad" fill={COLORS.success} radius={[3, 3, 0, 0]} />
+                  <Legend wrapperStyle={{ fontSize: '11px' }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Cell detail table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr style={{ backgroundColor: COLORS.purplishBlue }}>
+                    {["Célula", "Ingresos", "Nómina", "Supervisión", "Gastos", "Utilidad", "Margen", "Nómina/Ingreso"].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-white font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {CELULAS_DATA.sort((a, b) => (b.utilidad / b.ingresos) - (a.utilidad / a.ingresos)).map((c, i) => {
+                    const margen = (c.utilidad / c.ingresos * 100);
+                    const nomPct = (c.nomina / c.ingresos * 100);
+                    return (
+                      <tr key={i} className={`border-b border-gray-50 ${c.utilidad < 0 ? 'bg-red-50' : i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                        <td className="px-3 py-2 font-medium text-gray-800">{c.celula}</td>
+                        <td className="px-3 py-2 text-gray-700">{fmt.currency(c.ingresos)}</td>
+                        <td className="px-3 py-2 text-gray-700">{fmt.currency(c.nomina)}</td>
+                        <td className="px-3 py-2 text-gray-500">{fmt.currency(c.supervision)}</td>
+                        <td className="px-3 py-2 text-gray-500">{fmt.currency(c.gastos)}</td>
+                        <td className="px-3 py-2 font-semibold" style={{ color: c.utilidad >= 0 ? COLORS.success : COLORS.error }}>{fmt.currency(c.utilidad)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`font-medium ${margen >= 50 ? 'text-green-600' : margen >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {fmt.percent(margen)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1">
+                            <div className="w-12 bg-gray-100 rounded-full h-1.5">
+                              <div className="h-1.5 rounded-full" style={{ 
+                                width: `${Math.min(nomPct, 100)}%`, 
+                                backgroundColor: nomPct > 80 ? COLORS.error : nomPct > 50 ? COLORS.warning : COLORS.success 
+                              }}></div>
+                            </div>
+                            <span className="text-gray-500">{fmt.percent(nomPct)}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Totals */}
+                  <tr className="border-t-2 border-gray-300 font-bold bg-gray-50">
+                    <td className="px-3 py-2.5 text-gray-800">TOTAL</td>
+                    <td className="px-3 py-2.5">{fmt.currency(CELULAS_DATA.reduce((s, c) => s + c.ingresos, 0))}</td>
+                    <td className="px-3 py-2.5">{fmt.currency(CELULAS_DATA.reduce((s, c) => s + c.nomina, 0))}</td>
+                    <td className="px-3 py-2.5">{fmt.currency(CELULAS_DATA.reduce((s, c) => s + c.supervision, 0))}</td>
+                    <td className="px-3 py-2.5">{fmt.currency(CELULAS_DATA.reduce((s, c) => s + c.gastos, 0))}</td>
+                    <td className="px-3 py-2.5" style={{ color: COLORS.success }}>{fmt.currency(CELULAS_DATA.reduce((s, c) => s + c.utilidad, 0))}</td>
+                    <td className="px-3 py-2.5">{fmt.percent(CELULAS_DATA.reduce((s, c) => s + c.utilidad, 0) / CELULAS_DATA.reduce((s, c) => s + c.ingresos, 0) * 100)}</td>
+                    <td className="px-3 py-2.5">{fmt.percent(CELULAS_DATA.reduce((s, c) => s + c.nomina, 0) / CELULAS_DATA.reduce((s, c) => s + c.ingresos, 0) * 100)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
