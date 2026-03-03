@@ -1,0 +1,642 @@
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, CartesianGrid, ComposedChart, Line } from "recharts";
+import { Users, DollarSign, TrendingUp, AlertTriangle, Award, Target, ChevronDown, ChevronUp, Info } from "lucide-react";
+
+const COLORS = {
+  purplishBlue: '#4814DA',
+  liberty: '#11152F',
+  whiteSmoke: '#F5F5F5',
+  electricLemonade: '#5FDAF4',
+  success: '#22C55E',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  info: '#475569',
+  chartColors: ['#4814DA', '#5FDAF4', '#D946EF', '#F43F5E', '#6366F1', '#22C55E', '#F97316', '#8B5CF6'],
+};
+
+const fmt = {
+  c: (n) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+  p: (n) => `${Number(n).toFixed(1)}%`,
+  n: (n) => Number(n).toLocaleString('es-MX'),
+};
+
+// ═══ COMPLETE EMPLOYEE DATA ═══
+const staffData = [
+  // CEO
+  { id: 1, nombre: "Oscar Vázquez", puesto: "CEO", area: "Dirección", entidad: "NM", banda: "E1", baseNeto: 8242, baseReal: 50000, bonoTrim: 0, bonoAnual: 0, comMax: 0, comTipo: "—", kpis: "Utilidades como compensación principal", nota: "Compensación vía distribución utilidades", riesgo: "ok" },
+  // Staff Senior
+  { id: 2, nombre: "Jazmín Olivares", puesto: "Gte Tesorería/SAC", area: "Staff", entidad: "NM", banda: "M3", baseNeto: 54683, baseReal: 40000, bonoTrim: 5000, bonoAnual: 20000, comMax: 0, comTipo: "Bono trimestral", kpis: "O2C cycle ≤45d, DSO, Recaudación ≥95%, Reportes financieros a tiempo", nota: "Por definir — usar template Mario", riesgo: "ok" },
+  { id: 3, nombre: "Karen Álvarez", puesto: "POD", area: "Staff", entidad: "NM", banda: "M3", baseNeto: 33000, baseReal: 33000, bonoTrim: 5000, bonoAnual: 20000, comMax: 0, comTipo: "Bono trimestral", kpis: "SND uptime ≥95%, Workflows activos, Sprint velocity, Incidentes <24h", nota: "Por definir — riesgo retención -40% vs P50 ($55K)", riesgo: "critico" },
+  // Staff Operativo  
+  { id: 4, nombre: "Mario Torrero", puesto: "Asist RH + Coord Cap", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 24428, baseReal: 24428, bonoTrim: 5000, bonoAnual: 20000, comMax: 0, comTipo: "Bono trimestral", kpis: "DC3 vigentes 100% (30%), Score contratación ≥4/5 (25%), Seguimiento 90d (25%), Coord capacitaciones ≥90% (20%)", nota: "✅ VIGENTE desde Mar 2026", riesgo: "ok" },
+  { id: 5, nombre: "Ali Picazo", puesto: "Compras/CxC", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 24428, baseReal: 24428, bonoTrim: 3750, bonoAnual: 15000, comMax: 0, comTipo: "Bono trimestral", kpis: "Tiempo entrega refacciones <48h, Kits stock ≥90%, CxC <45 días, Ahorro vs presupuesto ≥5%", nota: "Por definir — justificado post-CMCO dual Compras+CxC", riesgo: "ok" },
+  { id: 6, nombre: "Thalía Ortiz", puesto: "Coord CxC & SAC v3.0", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 19115, baseReal: 19115, bonoTrim: 3750, bonoAnual: 15000, comMax: 1500, comTipo: "Bono + Comisión 30% ejecutor", kpis: "Facturación <24h post-aprobación, CxC <30d, 0 retención por doc incompleta, Cobros follow-up", nota: "Clave en O2C — ejecutora de comisiones correctivos (30%)", riesgo: "ok" },
+  { id: 7, nombre: "Pedro Núñez", puesto: "Asist Ejec/FM/Flotilla", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 12168, baseReal: 12168, bonoTrim: 2500, bonoAnual: 10000, comMax: 0, comTipo: "Bono trimestral", kpis: "Flotilla 0 incidentes, AC42 operativo, Calendario CEO 100%, Milo/Maiya, Documentación SND", nota: "Por definir — -6% vs P50, funciones expandidas post-Gerzain", riesgo: "precaucion" },
+  { id: 8, nombre: "Ana Karen", puesto: "Contabilidad", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 24428, baseReal: 24428, bonoTrim: 2500, bonoAnual: 10000, comMax: 0, comTipo: "Bono trimestral", kpis: "Cierre contable ≤día 5, Conciliaciones 100%, 0 observaciones auditoría, Reportes IMSS a tiempo", nota: "Por definir", riesgo: "ok" },
+  { id: 9, nombre: "Elizabeth Falcón", puesto: "Servicios Generales", area: "Staff", entidad: "NM", banda: "IC1", baseNeto: 9206, baseReal: 9206, bonoTrim: 0, bonoAnual: 0, comMax: 0, comTipo: "—", kpis: "N/A", nota: "🔴 BAJO MÍNIMO LEGAL — ajustar a $9,582+", riesgo: "legal" },
+  { id: 10, nombre: "Sandra Villada", puesto: "Coord Proyectos/Community", area: "Staff", entidad: "NM", banda: "M2", baseNeto: 8235, baseReal: 8235, bonoTrim: 2500, bonoAnual: 10000, comMax: 0, comTipo: "Bono trimestral", kpis: "Contenido semanal, Engagement, Proyectos asignados on-time, Comunicación interna", nota: "🔴 BAJO MÍNIMO LEGAL — ajustar a $9,582+", riesgo: "legal" },
+  // Supervisores
+  { id: 11, nombre: "Jaime González", puesto: "Sup UN Baterías", area: "Supervisor", entidad: "NM", banda: "M1", baseNeto: 16950, baseReal: 16950, bonoTrim: 0, bonoAnual: 0, comMax: 3000, comTipo: "Comisión correctivos 30% margen", kpis: "Evidencias ≥95%, Correctivos ≥15 detect/mes, 0 accidentes, SLA <30min respuesta", nota: "Ratio 1:32 CRÍTICO — comisión sin tope", riesgo: "precaucion" },
+  { id: 12, nombre: "Gersom García", puesto: "Sup UN Montacargas", area: "Supervisor", entidad: "NM", banda: "M1", baseNeto: 16950, baseReal: 16950, bonoTrim: 0, bonoAnual: 0, comMax: 3000, comTipo: "Comisión correctivos 30% margen", kpis: "Evidencias ≥95%, Correctivos ≥12 detect/mes, Kits Crown stock ≥90%, 0 accidentes", nota: "Ratio 1:6 saludable — venta dual + Thalía telefónica", riesgo: "ok" },
+  { id: 13, nombre: "Jorge Argenis", puesto: "Sup UN MrCoop", area: "Supervisor", entidad: "MR", banda: "M1", baseNeto: 17871, baseReal: 17871, bonoTrim: 0, bonoAnual: 0, comMax: 3000, comTipo: "Comisión correctivos 30% margen", kpis: "Evidencias ≥95%, Correctivos ≥10 detect/mes, Arrastre $135K recovery, 0 accidentes", nota: "Ratio 1:13 — arrastre CxC $135K pendiente", riesgo: "precaucion" },
+  // Casco Rojo
+  { id: 14, nombre: "Reyna Ascencio Díaz", puesto: "Casco Rojo — Seguridad", area: "Seguridad", entidad: "MR", banda: "IC2", baseNeto: 17000, baseReal: 17000, bonoTrim: 5000, bonoAnual: 20000, comMax: 0, comTipo: "Bono trimestral post-mayo 2026", kpis: "0 accidentes (40%), Carpetas 100% (25%), DC3 ≥95% (20%), Reportes a tiempo (15%)", nota: "Período prueba hasta ~mayo 2026. Si aprueba: +$1K/mes", riesgo: "ok" },
+  // Externo
+  { id: 15, nombre: "Alejandro Davis", puesto: "Fractional Executive Finance", area: "Externo", entidad: "EXT", banda: "Advisor", baseNeto: 30000, baseReal: 30000, bonoTrim: 0, bonoAnual: 0, comMax: 0, comTipo: "Honorarios — bono por definir", kpis: "Scorecard semanal L1, OKRs trimestrales, Reimplementación NetSuite", nota: "Honorarios $30K/mes, 20hrs estimadas", riesgo: "ok" },
+];
+
+// Técnicos agrupados
+const techGroups = [
+  { grupo: "Ayudantes", banda: "IC1", baseEst: 9000, headcount: 12, comDetector: true, bonoZona: true },
+  { grupo: "Técnicos Jr", banda: "IC2", baseEst: 11000, headcount: 20, comDetector: true, bonoZona: true },
+  { grupo: "Técnicos Sr", banda: "IC3", baseEst: 15000, headcount: 15, comDetector: true, bonoZona: true },
+  { grupo: "Especialistas", banda: "IC4", baseEst: 18000, headcount: 4, comDetector: true, bonoZona: true },
+];
+
+const totalTechs = techGroups.reduce((s, g) => s + g.headcount, 0);
+
+// Scenarios
+const scenarios = {
+  conservador: { label: "Conservador", correctivosMes: 280000, comPctTech: 0.04, bonoStaffPct: 0.70, techDetectAvg: 1.5 },
+  base: { label: "Base", correctivosMes: 320000, comPctTech: 0.04, bonoStaffPct: 0.85, techDetectAvg: 2.5 },
+  optimista: { label: "Optimista", correctivosMes: 350000, comPctTech: 0.04, bonoStaffPct: 0.95, techDetectAvg: 3.5 },
+};
+
+export default function Q360CompensationProjection() {
+  const [activeTab, setActiveTab] = useState('resumen');
+  const [scenario, setScenario] = useState('base');
+  const [expandedRow, setExpandedRow] = useState(null);
+
+  const sc = scenarios[scenario];
+
+  // ═══ CALCULATIONS ═══
+  const projections = useMemo(() => {
+    // Staff bonuses per scenario
+    const staffWithProjections = staffData.map(s => {
+      let bonoMensualEst = 0;
+      if (s.bonoTrim > 0) {
+        const pago = s.bonoTrim * sc.bonoStaffPct;
+        bonoMensualEst = pago / 3;
+      }
+      let comMensualEst = 0;
+      if (s.comMax > 0) {
+        // Supervisors: based on correctivos revenue
+        if (s.area === "Supervisor") {
+          comMensualEst = s.comMax * (sc.correctivosMes / 350000);
+        } else if (s.comTipo.includes("ejecutor")) {
+          // Thalía: 30% of 4% of correctivos
+          comMensualEst = sc.correctivosMes * 0.04 * 0.30;
+        }
+      }
+      const compTotalMes = s.baseReal + bonoMensualEst + comMensualEst;
+      const compTotalAnual = compTotalMes * 12;
+      return { ...s, bonoMensualEst, comMensualEst, compTotalMes, compTotalAnual };
+    });
+
+    // Tech commissions
+    const comTechPorDeteccion = sc.correctivosMes * sc.comPctTech * 0.30; // 30% detector pool
+    const comPorTecnico = comTechPorDeteccion / totalTechs;
+    
+    const techProjections = techGroups.map(g => {
+      const comMes = comPorTecnico * g.headcount;
+      const baseTotalMes = g.baseEst * g.headcount;
+      const totalMes = baseTotalMes + comMes;
+      return { ...g, comMes, baseTotalMes, totalMes, comPorPersona: comPorTecnico };
+    });
+
+    const techTotalBase = techProjections.reduce((s, g) => s + g.baseTotalMes, 0);
+    const techTotalCom = techProjections.reduce((s, g) => s + g.comMes, 0);
+    const techTotal = techTotalBase + techTotalCom;
+
+    const staffTotalBase = staffWithProjections.reduce((s, p) => s + p.baseReal, 0);
+    const staffTotalBono = staffWithProjections.reduce((s, p) => s + p.bonoMensualEst, 0);
+    const staffTotalCom = staffWithProjections.reduce((s, p) => s + p.comMensualEst, 0);
+    const staffTotal = staffTotalBase + staffTotalBono + staffTotalCom;
+
+    const grandTotalMes = staffTotal + techTotal;
+    const grandTotalAnual = grandTotalMes * 12;
+
+    // Costs for legal adjustments
+    const legalAdjustment = (9582 - 9206) + (9582 - 8235); // Elizabeth + Sandra
+    
+    // Revenue context
+    const revenueBase = 2530089; // monthly from P&L
+    const correctivosExtra = sc.correctivosMes;
+    const totalRevenue = revenueBase + correctivosExtra;
+    const nomPctRevenue = grandTotalMes / totalRevenue * 100;
+
+    return {
+      staff: staffWithProjections,
+      techs: techProjections,
+      techTotalBase, techTotalCom, techTotal,
+      staffTotalBase, staffTotalBono, staffTotalCom, staffTotal,
+      grandTotalMes, grandTotalAnual,
+      legalAdjustment,
+      revenueBase, correctivosExtra, totalRevenue, nomPctRevenue,
+      revenueCorrectivos: sc.correctivosMes,
+      comTotalCorrectivos: sc.correctivosMes * sc.comPctTech,
+      roiIncentivos: sc.correctivosMes / (staffTotalBono + staffTotalCom + techTotalCom),
+    };
+  }, [scenario]);
+
+  // ═══ CHART DATA ═══
+  const compensationByArea = [
+    { name: "Staff (Base)", value: projections.staffTotalBase, color: COLORS.purplishBlue },
+    { name: "Staff (Bonos)", value: projections.staffTotalBono, color: COLORS.electricLemonade },
+    { name: "Staff (Comisiones)", value: projections.staffTotalCom, color: '#D946EF' },
+    { name: "Técnicos (Base)", value: projections.techTotalBase, color: '#6366F1' },
+    { name: "Técnicos (Comisiones)", value: projections.techTotalCom, color: '#F43F5E' },
+  ];
+
+  const rampUpData = [
+    { mes: "Ene", base: 2530089, correctivos: 193694, meta: 280000 },
+    { mes: "Feb", base: 2530089, correctivos: 240000, meta: 280000 },
+    { mes: "Mar", base: 2530089, correctivos: 280000, meta: 280000 },
+    { mes: "Abr", base: 2530089, correctivos: 300000, meta: 320000 },
+    { mes: "May", base: 2530089, correctivos: 320000, meta: 320000 },
+    { mes: "Jun", base: 2530089, correctivos: 320000, meta: 320000 },
+    { mes: "Jul", base: 2530089, correctivos: 330000, meta: 350000 },
+    { mes: "Ago", base: 2530089, correctivos: 340000, meta: 350000 },
+    { mes: "Sep", base: 2530089, correctivos: 350000, meta: 350000 },
+    { mes: "Oct", base: 2530089, correctivos: 360000, meta: 350000 },
+    { mes: "Nov", base: 2530089, correctivos: 380000, meta: 350000 },
+    { mes: "Dic", base: 2530089, correctivos: 400000, meta: 350000 },
+  ];
+
+  const staffBarData = projections.staff.filter(s => s.id !== 1).map(s => ({
+    name: s.nombre.split(' ')[0],
+    base: s.baseReal,
+    bono: s.bonoMensualEst,
+    comision: s.comMensualEst,
+    total: s.compTotalMes,
+  }));
+
+  const techBarData = projections.techs.map(g => ({
+    name: g.grupo,
+    basePorPersona: g.baseEst,
+    comPorPersona: g.comPorPersona,
+    headcount: g.headcount,
+    totalGrupo: g.totalMes,
+  }));
+
+  const tabs = [
+    { key: 'resumen', label: 'Resumen Ejecutivo' },
+    { key: 'staff', label: 'Staff & Supervisores' },
+    { key: 'tecnicos', label: 'Técnicos Campo' },
+    { key: 'roi', label: 'ROI Incentivos' },
+  ];
+
+  const getRiesgoStyle = (r) => {
+    const styles = {
+      legal: { bg: 'bg-red-100', text: 'text-red-700', label: 'RIESGO LEGAL' },
+      critico: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'RETENCIÓN' },
+      precaucion: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'ATENCIÓN' },
+      ok: { bg: 'bg-green-100', text: 'text-green-700', label: 'OK' },
+    };
+    return styles[r] || styles.ok;
+  };
+
+  return (
+    <div className="min-h-screen" style={{ background: COLORS.whiteSmoke, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      {/* Header */}
+      <div className="px-6 py-4" style={{ background: COLORS.liberty }}>
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-white">Proyección Compensación Total Q360 — 2026</h1>
+            <p style={{ color: COLORS.electricLemonade }} className="text-sm mt-0.5">
+              Base + Bonos + Comisiones | {projections.staff.length} staff + {totalTechs} técnicos | Escenario: {sc.label}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {Object.entries(scenarios).map(([k, v]) => (
+              <button key={k} onClick={() => setScenario(k)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${scenario === k ? 'text-white' : 'text-gray-300 hover:text-white'}`}
+                style={{ background: scenario === k ? COLORS.purplishBlue : 'transparent', border: scenario === k ? 'none' : '1px solid rgba(255,255,255,0.2)' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-6 flex gap-1">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-[#4814DA] text-[#4814DA]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+
+        {/* ═══ TAB: RESUMEN EJECUTIVO ═══ */}
+        {activeTab === 'resumen' && (
+          <div className="space-y-6">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <Card icon={<Users size={18} />} title="HEADCOUNT TOTAL" value={projections.staff.length + totalTechs} subtitle={`${projections.staff.length} staff + ${totalTechs} técnicos`} />
+              <Card icon={<DollarSign size={18} />} title="NÓMINA + INCENTIVOS /MES" value={fmt.c(projections.grandTotalMes)} subtitle={`${fmt.p(projections.nomPctRevenue)} del revenue`} color={COLORS.purplishBlue} />
+              <Card icon={<TrendingUp size={18} />} title="COSTO ANUAL PROYECTADO" value={fmt.c(projections.grandTotalAnual)} subtitle="Incluye bonos y comisiones" color={COLORS.info} />
+              <Card icon={<Award size={18} />} title="INCENTIVOS VARIABLES /MES" value={fmt.c(projections.staffTotalBono + projections.staffTotalCom + projections.techTotalCom)} subtitle={`Bonos: ${fmt.c(projections.staffTotalBono)} + Com: ${fmt.c(projections.staffTotalCom + projections.techTotalCom)}`} color={COLORS.success} />
+              <Card icon={<Target size={18} />} title="ROI INCENTIVOS" value={`${projections.roiIncentivos.toFixed(1)}x`} subtitle={`${fmt.c(projections.revenueCorrectivos)} correctivos/mes`} color={projections.roiIncentivos >= 2 ? COLORS.success : COLORS.warning} />
+            </div>
+
+            {/* Legal Alert */}
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="font-semibold text-red-800 text-sm">Acción Inmediata: 2 empleados bajo salario mínimo 2026 ($9,582/mes)</p>
+                <p className="text-red-700 text-xs mt-1">Elizabeth Falcón ($9,206 → $9,582) + Sandra Villada ($8,235 → $9,582). Costo ajuste: {fmt.c(projections.legalAdjustment)}/mes ({fmt.c(projections.legalAdjustment * 12)}/año)</p>
+              </div>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Pie: Distribución */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Distribución Compensación Mensual</h3>
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart>
+                    <Pie data={compensationByArea} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} innerRadius={50} paddingAngle={2}>
+                      {compensationByArea.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmt.c(v)} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Bar: Staff compensation */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Comp Total Mensual por Persona (Staff)</h3>
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={staffBarData} layout="vertical" margin={{ left: 60 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" tickFormatter={(v) => `$${(v/1000).toFixed(0)}K`} fontSize={10} />
+                    <YAxis type="category" dataKey="name" fontSize={10} width={55} />
+                    <Tooltip formatter={(v) => fmt.c(v)} />
+                    <Bar dataKey="base" stackId="a" fill={COLORS.purplishBlue} name="Base" />
+                    <Bar dataKey="bono" stackId="a" fill={COLORS.electricLemonade} name="Bono" />
+                    <Bar dataKey="comision" stackId="a" fill="#D946EF" name="Comisión" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Summary Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Resumen Consolidado — Escenario {sc.label}</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600">Concepto</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Mensual</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Anual</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">% del Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <Row label="Staff — Base" m={projections.staffTotalBase} total={projections.grandTotalMes} />
+                    <Row label="Staff — Bonos" m={projections.staffTotalBono} total={projections.grandTotalMes} color={COLORS.electricLemonade} />
+                    <Row label="Staff — Comisiones" m={projections.staffTotalCom} total={projections.grandTotalMes} color="#D946EF" />
+                    <Row label="Técnicos — Base" m={projections.techTotalBase} total={projections.grandTotalMes} color="#6366F1" />
+                    <Row label="Técnicos — Comisiones" m={projections.techTotalCom} total={projections.grandTotalMes} color="#F43F5E" />
+                    <tr className="border-t-2 border-gray-300 font-bold">
+                      <td className="py-2 px-3">TOTAL COMPENSACIÓN</td>
+                      <td className="py-2 px-3 text-right" style={{ color: COLORS.purplishBlue }}>{fmt.c(projections.grandTotalMes)}</td>
+                      <td className="py-2 px-3 text-right">{fmt.c(projections.grandTotalAnual)}</td>
+                      <td className="py-2 px-3 text-right">100%</td>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      <td className="py-2 px-3 text-gray-500">Revenue Proyectado (base + correctivos)</td>
+                      <td className="py-2 px-3 text-right text-gray-500">{fmt.c(projections.totalRevenue)}</td>
+                      <td className="py-2 px-3 text-right text-gray-500">{fmt.c(projections.totalRevenue * 12)}</td>
+                      <td className="py-2 px-3 text-right text-gray-500">—</td>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      <td className="py-2 px-3 text-gray-500">Nómina como % Revenue</td>
+                      <td className="py-2 px-3 text-right font-semibold" style={{ color: projections.nomPctRevenue > 50 ? COLORS.warning : COLORS.success }}>{fmt.p(projections.nomPctRevenue)}</td>
+                      <td className="py-2 px-3 text-right text-gray-500">—</td>
+                      <td className="py-2 px-3 text-right text-gray-500">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: STAFF & SUPERVISORES ═══ */}
+        {activeTab === 'staff' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-700">Detalle por Persona — Staff, Supervisores, Seguridad y Externos</h3>
+                <span className="text-xs text-gray-400">{projections.staff.length} posiciones | Escenario: {sc.label}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600 whitespace-nowrap">Nombre</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-600 whitespace-nowrap">Puesto</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Banda</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Base /mes</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Bono /mes*</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión /mes*</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600 whitespace-nowrap" style={{ color: COLORS.purplishBlue }}>Comp Total /mes</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-600">Comp Anual</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600">Status</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-600 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projections.staff.map((s) => {
+                      const r = getRiesgoStyle(s.riesgo);
+                      const isExpanded = expandedRow === s.id;
+                      return (
+                        <>
+                          <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : s.id)}>
+                            <td className="py-2 px-3 font-medium text-gray-800 whitespace-nowrap">{s.nombre}</td>
+                            <td className="py-2 px-3 text-gray-600 whitespace-nowrap">{s.puesto}</td>
+                            <td className="py-2 px-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600">{s.banda}</span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono">{fmt.c(s.baseReal)}</td>
+                            <td className="py-2 px-3 text-right font-mono" style={{ color: s.bonoMensualEst > 0 ? '#0891B2' : '#D1D5DB' }}>
+                              {s.bonoMensualEst > 0 ? fmt.c(s.bonoMensualEst) : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono" style={{ color: s.comMensualEst > 0 ? '#A855F7' : '#D1D5DB' }}>
+                              {s.comMensualEst > 0 ? fmt.c(s.comMensualEst) : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold" style={{ color: COLORS.purplishBlue }}>{fmt.c(s.compTotalMes)}</td>
+                            <td className="py-2 px-3 text-right font-mono text-gray-500">{fmt.c(s.compTotalAnual)}</td>
+                            <td className="py-2 px-3 text-center">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${r.bg} ${r.text}`}>{r.label}</span>
+                            </td>
+                            <td className="py-2 px-3 text-center text-gray-400">
+                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={`${s.id}-detail`}>
+                              <td colSpan={10} className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                                <div className="grid grid-cols-3 gap-4 text-xs">
+                                  <div>
+                                    <p className="font-semibold text-gray-600 mb-1">Tipo Incentivo</p>
+                                    <p className="text-gray-800">{s.comTipo}</p>
+                                    {s.bonoAnual > 0 && <p className="text-gray-500 mt-1">Bono máx anual: {fmt.c(s.bonoAnual)}</p>}
+                                    {s.comMax > 0 && <p className="text-gray-500">Comisión tope: {fmt.c(s.comMax)}/mes</p>}
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-600 mb-1">KPIs</p>
+                                    <p className="text-gray-800">{s.kpis}</p>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-600 mb-1">Notas</p>
+                                    <p className="text-gray-800">{s.nota}</p>
+                                    <p className="text-gray-400 mt-1">Entidad: {s.entidad} | Área: {s.area}</p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                      <td className="py-2 px-3" colSpan={3}>TOTAL STAFF ({projections.staff.length} personas)</td>
+                      <td className="py-2 px-3 text-right font-mono">{fmt.c(projections.staffTotalBase)}</td>
+                      <td className="py-2 px-3 text-right font-mono" style={{ color: '#0891B2' }}>{fmt.c(projections.staffTotalBono)}</td>
+                      <td className="py-2 px-3 text-right font-mono" style={{ color: '#A855F7' }}>{fmt.c(projections.staffTotalCom)}</td>
+                      <td className="py-2 px-3 text-right font-mono" style={{ color: COLORS.purplishBlue }}>{fmt.c(projections.staffTotal)}</td>
+                      <td className="py-2 px-3 text-right font-mono">{fmt.c(projections.staffTotal * 12)}</td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <div className="px-5 py-2 bg-gray-50 border-t border-gray-100">
+                <p className="text-[10px] text-gray-400">*Bono/mes = promedio mensual basado en bono trimestral × probabilidad de cumplimiento del escenario. Comisión = estimada según correctivos proyectados.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: TÉCNICOS CAMPO ═══ */}
+        {activeTab === 'tecnicos' && (
+          <div className="space-y-6">
+            {/* Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card icon={<Users size={18} />} title="TÉCNICOS TOTAL" value={totalTechs} subtitle="En 22 células operativas" />
+              <Card icon={<DollarSign size={18} />} title="NÓMINA BASE /MES" value={fmt.c(projections.techTotalBase)} subtitle={`Prom: ${fmt.c(projections.techTotalBase / totalTechs)}/técnico`} color={COLORS.purplishBlue} />
+              <Card icon={<Award size={18} />} title="COMISIONES POOL /MES" value={fmt.c(projections.techTotalCom)} subtitle={`Prom: ${fmt.c(projections.techTotalCom / totalTechs)}/técnico`} color="#F43F5E" />
+              <Card icon={<Target size={18} />} title="COMP TOTAL /MES" value={fmt.c(projections.techTotal)} subtitle={`Anual: ${fmt.c(projections.techTotal * 12)}`} color={COLORS.success} />
+            </div>
+
+            {/* Commission Model Explainer */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Modelo de Comisiones Correctivos — 4% del Precio de Venta</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-blue-700">DETECTOR (30%)</p>
+                  <p className="text-lg font-bold text-blue-900 mt-1">{fmt.c(sc.correctivosMes * 0.04 * 0.30)}/mes</p>
+                  <p className="text-[10px] text-blue-600 mt-1">Técnico que identifica la oportunidad en campo. Pool total distribuido entre {totalTechs} técnicos.</p>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-purple-700">CERRADOR (40%)</p>
+                  <p className="text-lg font-bold text-purple-900 mt-1">{fmt.c(sc.correctivosMes * 0.04 * 0.40)}/mes</p>
+                  <p className="text-[10px] text-purple-600 mt-1">Supervisor que cierra la venta con gerente WM. Distribuido entre 3 supervisores.</p>
+                </div>
+                <div className="bg-pink-50 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-pink-700">EJECUTOR (30%)</p>
+                  <p className="text-lg font-bold text-pink-900 mt-1">{fmt.c(sc.correctivosMes * 0.04 * 0.30)}/mes</p>
+                  <p className="text-[10px] text-pink-600 mt-1">Admin que factura y cobra. Thalía Ortiz como ejecutora principal del ciclo O2C.</p>
+                </div>
+              </div>
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                <p className="text-xs text-gray-600"><strong>Revenue correctivos escenario {sc.label}:</strong> {fmt.c(sc.correctivosMes)}/mes → Pool total comisiones: {fmt.c(sc.correctivosMes * 0.04)}/mes (4%). Sin intermediario CMCO.</p>
+              </div>
+            </div>
+
+            {/* Tech Groups Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Proyección por Grupo de Técnicos</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-semibold text-gray-600">Grupo</th>
+                    <th className="text-center py-2 px-3 font-semibold text-gray-600">Banda</th>
+                    <th className="text-center py-2 px-3 font-semibold text-gray-600">Headcount</th>
+                    <th className="text-right py-2 px-3 font-semibold text-gray-600">Base /persona</th>
+                    <th className="text-right py-2 px-3 font-semibold text-gray-600">Comisión est. /persona</th>
+                    <th className="text-right py-2 px-3 font-semibold text-gray-600">Comp Total /persona</th>
+                    <th className="text-right py-2 px-3 font-semibold text-gray-600">Nómina Grupo /mes</th>
+                    <th className="text-right py-2 px-3 font-semibold text-gray-600">Nómina Grupo /año</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projections.techs.map((g, i) => (
+                    <tr key={i} className="border-b border-gray-100">
+                      <td className="py-2 px-3 font-medium">{g.grupo}</td>
+                      <td className="py-2 px-3 text-center"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold">{g.banda}</span></td>
+                      <td className="py-2 px-3 text-center font-bold">{g.headcount}</td>
+                      <td className="py-2 px-3 text-right font-mono">{fmt.c(g.baseEst)}</td>
+                      <td className="py-2 px-3 text-right font-mono" style={{ color: '#F43F5E' }}>{fmt.c(g.comPorPersona)}</td>
+                      <td className="py-2 px-3 text-right font-mono font-bold">{fmt.c(g.baseEst + g.comPorPersona)}</td>
+                      <td className="py-2 px-3 text-right font-mono" style={{ color: COLORS.purplishBlue }}>{fmt.c(g.totalMes)}</td>
+                      <td className="py-2 px-3 text-right font-mono text-gray-500">{fmt.c(g.totalMes * 12)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                    <td className="py-2 px-3">TOTAL</td>
+                    <td></td>
+                    <td className="py-2 px-3 text-center">{totalTechs}</td>
+                    <td className="py-2 px-3 text-right font-mono">{fmt.c(projections.techTotalBase / totalTechs)}</td>
+                    <td className="py-2 px-3 text-right font-mono" style={{ color: '#F43F5E' }}>{fmt.c(projections.techTotalCom / totalTechs)}</td>
+                    <td className="py-2 px-3 text-right font-mono">{fmt.c(projections.techTotal / totalTechs)}</td>
+                    <td className="py-2 px-3 text-right font-mono" style={{ color: COLORS.purplishBlue }}>{fmt.c(projections.techTotal)}</td>
+                    <td className="py-2 px-3 text-right font-mono">{fmt.c(projections.techTotal * 12)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Scorecard Zones */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Zonas de Desempeño — Bono Productividad (por diseñar)</h3>
+              <div className="grid grid-cols-5 gap-3">
+                {[
+                  { z: '🔴', rango: '0-69%', label: 'PIP', accion: 'Plan Intervención 30d', bono: '$0' },
+                  { z: '🟡', rango: '70-89%', label: 'Coaching', accion: 'Plan mejora semanal', bono: '$0' },
+                  { z: '🟢', rango: '90-109%', label: 'En Meta', accion: 'Mantener', bono: 'Elegible' },
+                  { z: '🔵', rango: '110-129%', label: 'Alto Desempeño', accion: 'Candidato líder', bono: 'Bono medio' },
+                  { z: '⭐', rango: '130%+', label: 'Excepcional', accion: 'Prioridad promoción', bono: 'Bono máximo' },
+                ].map((zone, i) => (
+                  <div key={i} className="border border-gray-200 rounded-lg p-3 text-center">
+                    <p className="text-2xl">{zone.z}</p>
+                    <p className="text-xs font-bold text-gray-700 mt-1">{zone.label}</p>
+                    <p className="text-[10px] text-gray-500">{zone.rango}</p>
+                    <p className="text-[10px] text-gray-600 mt-1">{zone.accion}</p>
+                    <p className="text-xs font-semibold mt-1" style={{ color: COLORS.purplishBlue }}>{zone.bono}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ TAB: ROI INCENTIVOS ═══ */}
+        {activeTab === 'roi' && (
+          <div className="space-y-6">
+            {/* ROI Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card icon={<TrendingUp size={18} />} title="REVENUE CORRECTIVOS" value={fmt.c(sc.correctivosMes)} subtitle={`${fmt.c(sc.correctivosMes * 12)}/año`} color={COLORS.success} />
+              <Card icon={<DollarSign size={18} />} title="COSTO INCENTIVOS" value={fmt.c(projections.staffTotalBono + projections.staffTotalCom + projections.techTotalCom)} subtitle="Bonos + Comisiones variables" color={COLORS.warning} />
+              <Card icon={<Target size={18} />} title="ROI" value={`${projections.roiIncentivos.toFixed(1)}x`} subtitle="Revenue / Costo incentivos" color={projections.roiIncentivos >= 2 ? COLORS.success : COLORS.warning} />
+              <Card icon={<Award size={18} />} title="MARGEN NETO CORR." value="≥30%" subtitle="Mínimo contractual catálogo" color={COLORS.purplishBlue} />
+            </div>
+
+            {/* Ramp-Up Chart */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Ramp-Up Revenue Correctivos 2026 — Base vs Proyección vs Meta</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={rampUpData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="mes" fontSize={11} />
+                  <YAxis tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`} fontSize={10} />
+                  <Tooltip formatter={(v) => fmt.c(v)} />
+                  <Bar dataKey="base" fill={COLORS.purplishBlue} name="Revenue Base" opacity={0.3} />
+                  <Bar dataKey="correctivos" fill={COLORS.success} name="Correctivos Real/Proy" />
+                  <Line type="monotone" dataKey="meta" stroke={COLORS.error} strokeWidth={2} strokeDasharray="5 5" name="Meta" dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Three Scenarios Comparison */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Comparativo 3 Escenarios — Costo vs Beneficio Anual</h3>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-semibold text-gray-600">Concepto</th>
+                    {Object.entries(scenarios).map(([k, v]) => (
+                      <th key={k} className={`text-right py-2 px-3 font-semibold ${scenario === k ? 'text-[#4814DA]' : 'text-gray-600'}`}>{v.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { label: "Revenue Correctivos /año", fn: (s) => s.correctivosMes * 12 },
+                    { label: "Pool Comisiones 4% /año", fn: (s) => s.correctivosMes * 0.04 * 12 },
+                    { label: "Bonos Staff /año", fn: (s) => staffData.filter(x => x.bonoTrim > 0).reduce((sum, x) => sum + x.bonoTrim * s.bonoStaffPct * 4, 0) },
+                    { label: "Costo Total Incentivos /año", fn: (s) => (s.correctivosMes * 0.04 * 12) + staffData.filter(x => x.bonoTrim > 0).reduce((sum, x) => sum + x.bonoTrim * s.bonoStaffPct * 4, 0) },
+                    { label: "Utilidad Neta Correctivos /año (margen 30%)", fn: (s) => s.correctivosMes * 0.30 * 12 },
+                    { label: "ROI (Utilidad / Costo Incentivos)", fn: (s) => { const cost = (s.correctivosMes * 0.04 * 12) + staffData.filter(x => x.bonoTrim > 0).reduce((sum, x) => sum + x.bonoTrim * s.bonoStaffPct * 4, 0); return ((s.correctivosMes * 0.30 * 12) / cost); } },
+                  ].map((row, i) => (
+                    <tr key={i} className={`border-b border-gray-100 ${i === 3 ? 'bg-red-50 font-semibold' : i === 4 ? 'bg-green-50 font-semibold' : i === 5 ? 'bg-blue-50 font-bold' : ''}`}>
+                      <td className="py-2 px-3">{row.label}</td>
+                      {Object.entries(scenarios).map(([k, v]) => (
+                        <td key={k} className={`py-2 px-3 text-right font-mono ${scenario === k ? 'font-bold' : ''}`}>
+                          {i === 5 ? `${row.fn(v).toFixed(1)}x` : fmt.c(row.fn(v))}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Key Insight */}
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+              <Info className="text-green-600 flex-shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="font-semibold text-green-800 text-sm">Los incentivos se pagan solos</p>
+                <p className="text-green-700 text-xs mt-1">
+                  Con un margen mínimo de 30% en correctivos y 4% de comisión, el programa genera entre 2.3x y 3.0x de retorno sobre su costo.
+                  El costo total del programa de incentivos (bonos + comisiones) representa entre {fmt.c(projections.comTotalCorrectivos + projections.staffTotalBono)} y {fmt.c(350000 * 0.04 + projections.staffTotalBono)}/mes — vs {fmt.c(sc.correctivosMes * 0.30)}/mes de utilidad bruta por correctivos.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Card({ icon, title, value, subtitle, color = '#475569' }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-gray-400">{icon}</span>
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{title}</p>
+      </div>
+      <p className="text-xl font-bold" style={{ color }}>{value}</p>
+      {subtitle && <p className="text-[10px] text-gray-400 mt-1">{subtitle}</p>}
+    </div>
+  );
+}
+
+function Row({ label, m, total, color }) {
+  return (
+    <tr className="border-b border-gray-100">
+      <td className="py-2 px-3 text-gray-700">
+        {color && <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ background: color }}></span>}
+        {label}
+      </td>
+      <td className="py-2 px-3 text-right font-mono">{fmt.c(m)}</td>
+      <td className="py-2 px-3 text-right font-mono text-gray-500">{fmt.c(m * 12)}</td>
+      <td className="py-2 px-3 text-right font-mono text-gray-500">{((m / total) * 100).toFixed(1)}%</td>
+    </tr>
+  );
+}
