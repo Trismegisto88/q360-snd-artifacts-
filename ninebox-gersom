@@ -1,0 +1,589 @@
+import { useState, useMemo } from "react";
+import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LineChart, Line } from "recharts";
+import { TrendingUp, TrendingDown, AlertTriangle, Award, User, Target, Shield, Wrench, CheckCircle } from "lucide-react";
+
+const COLORS = {
+  purplishBlue: '#4814DA',
+  liberty: '#11152F',
+  whiteSmoke: '#F5F5F5',
+  electricLemonade: '#5FDAF4',
+  success: '#22C55E',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  info: '#475569',
+};
+
+const QUADRANTS = [
+  { perf: 'ALTO', val: 'ALTO', label: '⭐ Star', color: '#7C3AED', multBono: '100%', comision: '100% + 1%', accion: 'Retención activa, promoción' },
+  { perf: 'ALTO', val: 'MEDIO', label: 'High Performer', color: '#4814DA', multBono: '75%', comision: '100%', accion: 'Mentoring valores' },
+  { perf: 'MEDIO', val: 'ALTO', label: 'High Potential', color: '#6366F1', multBono: '50%', comision: '100%', accion: 'Desarrollo acelerado' },
+  { perf: 'MEDIO', val: 'MEDIO', label: 'Core Player', color: '#3B82F6', multBono: '50%', comision: '100%', accion: 'Mantener y capacitar' },
+  { perf: 'ALTO', val: 'BAJO', label: 'Misaligned', color: '#F59E0B', multBono: '25%', comision: '50%', accion: 'PIP 90d valores' },
+  { perf: 'BAJO', val: 'MEDIO', label: 'Underperformer', color: '#F97316', multBono: '0%', comision: '50%', accion: 'PIP 30d performance' },
+  { perf: 'BAJO', val: 'ALTO', label: 'Talent Risk', color: '#06B6D4', multBono: '25%', comision: '75%', accion: 'Investigar, reubicar' },
+  { perf: 'MEDIO', val: 'BAJO', label: 'Misfit', color: '#EF4444', multBono: '0%', comision: '0%', accion: 'PIP 60d, separación' },
+  { perf: 'BAJO', val: 'BAJO', label: 'Mismatch', color: '#991B1B', multBono: '0%', comision: '0%', accion: 'Separación <30d' },
+];
+
+const fmt = {
+  currency: (n) => `$${Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`,
+  percent: (n) => `${Number(n).toFixed(1)}%`,
+};
+
+const getQuadrant = (perfLevel, valLevel) => {
+  return QUADRANTS.find(q => q.perf === perfLevel && q.val === valLevel) || QUADRANTS[8];
+};
+
+// Real data from O2C Montacargas files
+const MONTHS_DATA = {
+  dic25: {
+    label: 'Diciembre 2025',
+    performance: {
+      score: 75,
+      level: 'MEDIO',
+      kpis: [
+        { id: 'PREV', name: 'Prev. completados vs plan', peso: 20, score: 82, meta: '≥95%', real: '82% (7 Sam\'s de 9 programados sem1)', detail: 'Dic fue mes corto. 7 de 9 OTs preventivas completadas primera semana. Total prev facturado: $245K' },
+        { id: 'CORR', name: 'Revenue correctivos vs target', peso: 20, score: 77, meta: '$155K/mes', real: '$119K facturado', detail: '21 OTs correctivas Dic. Destacan: SM Universidad $20.8K, SM Cuemanco $16.8K, SM Santín $14K, SM Toltecas $17.3K' },
+        { id: 'EVID', name: 'Evidencias ANTES/DESPUÉS', peso: 15, score: 88, meta: '≥95%', real: '88%', detail: 'F3 calidad de servicio — DataScope compliance en 19 de 21 correctivos' },
+        { id: 'SLA', name: 'Tiempo respuesta <4 hrs', peso: 15, score: 70, meta: '<4 hrs', real: '4.8 hrs promedio', detail: 'Dic pico fuerte + vacaciones impactó tiempos de respuesta' },
+        { id: 'DET', name: 'Correctivos detectados', peso: 10, score: 90, meta: '≥6/mes', real: '21 OTs generadas', detail: '21 correctivos en Dic = 3.5x el target mensual' },
+        { id: 'SND', name: 'Uso herramientas SND', peso: 10, score: 72, meta: '≥90%', real: '72%', detail: 'Tableros operativos activos, pero registro diario inconsistente' },
+        { id: 'SEG', name: 'Reportes seguridad', peso: 5, score: 100, meta: '100%', real: '100%', detail: '0 accidentes laborales — mantiene racha' },
+        { id: 'ASIS', name: 'Asistencia y puntualidad', peso: 5, score: 95, meta: '≥95%', real: '95%', detail: 'Solo 1 ausencia justificada en el mes' },
+      ],
+    },
+    values: {
+      score: 88,
+      level: 'MEDIO',
+      competencias: [
+        { id: 'V1', name: 'Accountability Digital', peso: 25, score: 78, principio: '"Sin registro, no existe"' },
+        { id: 'V2', name: 'Orientación Cliente', peso: 20, score: 95, principio: 'Servicio WM sin excusas' },
+        { id: 'V3', name: 'Iniciativa y Detección', peso: 20, score: 95, principio: 'Modelo venta dual innovador' },
+        { id: 'V4', name: 'Seguridad y Compliance', peso: 15, score: 98, principio: '0 accidentes — racha activa' },
+        { id: 'V5', name: 'Colaboración y Com.', peso: 10, score: 85, principio: 'Coord. activa con Thalía' },
+        { id: 'V6', name: 'Integridad', peso: 10, score: 92, principio: 'Reportes transparentes' },
+      ],
+    },
+    operativo: {
+      prevFacturado: 245474,
+      corrFacturado: 119031,
+      corrTarget: 155000,
+      otsCorrectivas: 21,
+      otsSinFacturar: 8,
+      arrastre: 341951,
+      margenPrev: 46.1,
+      margenCorr: 71.0,
+      tecnicos: 6,
+      ratioCells: '1:6',
+      elecVhsa: -11.0,
+    },
+    comisiones: {
+      cerrador: { tasa: '1.6%', estimado: '$1,904', activacion: '≥6 corr/mes ✅ (21 OTs)' },
+      refacciones: { tasa: '60% de 3%', estimado: '$380', activacion: 'Detección + cotización ✅' },
+    },
+  },
+  ene26: {
+    label: 'Enero 2026',
+    performance: {
+      score: 84,
+      level: 'MEDIO',
+      kpis: [
+        { id: 'PREV', name: 'Prev. completados vs plan', peso: 20, score: 88, meta: '≥95%', real: '88% (5 semanas, 22 Sam\'s atendidos)', detail: 'Ene: $280K en preventivos. 5 semanas de operación. Incluye arrastre de igualas Ago/Oct recuperadas' },
+        { id: 'CORR', name: 'Revenue correctivos vs target', peso: 20, score: 100, meta: '$155K/mes', real: '$155K facturado', detail: '22 OTs correctivas Ene. Highlight: SM Calzada Zaragoza $58.3K, SM Tepeyac $34.9K, SM Santín $10.7K' },
+        { id: 'EVID', name: 'Evidencias ANTES/DESPUÉS', peso: 15, score: 90, meta: '≥95%', real: '90%', detail: 'Mejora +2pp vs Dic. 20 de 22 correctivos con evidencia completa' },
+        { id: 'SLA', name: 'Tiempo respuesta <4 hrs', peso: 15, score: 78, meta: '<4 hrs', real: '3.9 hrs promedio', detail: 'Mejora significativa vs Dic (4.8 hrs). Dentro de SLA' },
+        { id: 'DET', name: 'Correctivos detectados', peso: 10, score: 95, meta: '≥6/mes', real: '22 OTs + 7 pending', detail: '22 correctivos facturados + pipeline de 7 sin precio aún. Actividad sostenida' },
+        { id: 'SND', name: 'Uso herramientas SND', peso: 10, score: 78, meta: '≥90%', real: '78%', detail: 'Tableros operativos Gersom activos. Registro diario mejorando +6pp' },
+        { id: 'SEG', name: 'Reportes seguridad', peso: 5, score: 100, meta: '100%', real: '100%', detail: '0 accidentes laborales — racha continua' },
+        { id: 'ASIS', name: 'Asistencia y puntualidad', peso: 5, score: 98, meta: '≥95%', real: '98%', detail: 'Asistencia perfecta excepto 1 tarde justificada' },
+      ],
+    },
+    values: {
+      score: 91,
+      level: 'ALTO',
+      competencias: [
+        { id: 'V1', name: 'Accountability Digital', peso: 25, score: 82, principio: '"Sin registro, no existe"' },
+        { id: 'V2', name: 'Orientación Cliente', peso: 20, score: 96, principio: 'Servicio WM sin excusas' },
+        { id: 'V3', name: 'Iniciativa y Detección', peso: 20, score: 98, principio: 'Modelo venta dual + kits Crown' },
+        { id: 'V4', name: 'Seguridad y Compliance', peso: 15, score: 98, principio: '0 accidentes — racha activa' },
+        { id: 'V5', name: 'Colaboración y Com.', peso: 10, score: 90, principio: 'Coord. con Thalía + campo' },
+        { id: 'V6', name: 'Integridad', peso: 10, score: 95, principio: 'Reportes transparentes' },
+      ],
+    },
+    operativo: {
+      prevFacturado: 280627,
+      corrFacturado: 155136,
+      corrTarget: 155000,
+      otsCorrectivas: 22,
+      otsSinFacturar: 7,
+      arrastre: 475461,
+      margenPrev: 46.0,
+      margenCorr: 71.0,
+      tecnicos: 6,
+      ratioCells: '1:6',
+      elecVhsa: -11.0,
+    },
+    comisiones: {
+      cerrador: { tasa: '1.6%', estimado: '$2,482', activacion: '≥6 corr/mes ✅ (22 OTs)' },
+      refacciones: { tasa: '60% de 3%', estimado: '$486', activacion: 'Detección + cotización ✅' },
+    },
+  },
+};
+
+export default function NineBoxGersom() {
+  const [selectedMonth, setSelectedMonth] = useState('ene26');
+  const [activeTab, setActiveTab] = useState('overview');
+
+  const data = MONTHS_DATA[selectedMonth];
+  const quadrant = getQuadrant(data.performance.level, data.values.level);
+  const prevMonth = selectedMonth === 'ene26' ? MONTHS_DATA.dic25 : null;
+  const perfDelta = prevMonth ? data.performance.score - prevMonth.performance.score : null;
+  const valDelta = prevMonth ? data.values.score - prevMonth.values.score : null;
+
+  const radarData = data.values.competencias.map(c => ({
+    competencia: c.id,
+    fullName: c.name,
+    score: c.score,
+    max: 100,
+  }));
+
+  const kpiBarData = data.performance.kpis.map(k => ({
+    name: k.id,
+    fullName: k.name,
+    score: k.score,
+    peso: k.peso,
+  }));
+
+  const trendData = [
+    { mes: 'Dic 25', prev: 245474, corr: 119031, target: 155000 },
+    { mes: 'Ene 26', prev: 280627, corr: 155136, target: 155000 },
+  ];
+
+  return (
+    <div className="min-h-screen" style={{ backgroundColor: COLORS.whiteSmoke, fontFamily: 'Inter, system-ui, sans-serif' }}>
+      {/* Header */}
+      <div className="px-6 py-4" style={{ backgroundColor: COLORS.liberty }}>
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#5FDAF4' }}>
+              <Wrench size={20} color="#11152F" />
+            </div>
+            <div>
+              <h1 className="text-white text-lg font-bold">Nine-Box Grid — Gersom García</h1>
+              <p className="text-gray-400 text-xs">Supervisor UN Montacargas | NM Limited | 6 técnicos, ratio 1:6 | Rating: B-Player</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {Object.entries(MONTHS_DATA).map(([key, val]) => (
+              <button
+                key={key}
+                onClick={() => setSelectedMonth(key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedMonth === key ? 'text-white shadow-lg' : 'text-gray-400 hover:text-white'
+                }`}
+                style={selectedMonth === key ? { backgroundColor: '#5FDAF4', color: COLORS.liberty } : {}}
+              >
+                {val.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Veredicto Card */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: quadrant.color }}>
+                {quadrant.label.split(' ')[0]}
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold" style={{ color: COLORS.liberty }}>{quadrant.label}</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  Performance: <span className="font-semibold">{data.performance.level}</span> ({data.performance.score}%) | 
+                  Values: <span className="font-semibold">{data.values.level}</span> ({data.values.score}%)
+                </p>
+                <p className="text-xs mt-2 px-3 py-1 rounded-full inline-block font-medium" style={{ backgroundColor: quadrant.color + '15', color: quadrant.color }}>
+                  {quadrant.accion}
+                </p>
+              </div>
+            </div>
+            <div className="text-right space-y-1">
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-xs text-gray-400">Tope Comisión</span>
+                <span className="text-sm font-bold" style={{ color: COLORS.purplishBlue }}>$5,000/mes</span>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-xs text-gray-400">Correctivos {data.label.substring(0, 3)}</span>
+                <span className="text-sm font-bold" style={{ color: data.operativo.corrFacturado >= data.operativo.corrTarget ? COLORS.success : COLORS.warning }}>
+                  {fmt.currency(data.operativo.corrFacturado)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <span className="text-xs text-gray-400">vs Target</span>
+                <span className="text-sm font-bold" style={{ color: data.operativo.corrFacturado >= data.operativo.corrTarget ? COLORS.success : COLORS.warning }}>
+                  {fmt.percent(data.operativo.corrFacturado / data.operativo.corrTarget * 100)}
+                </span>
+              </div>
+              {perfDelta !== null && (
+                <div className="flex items-center gap-1 justify-end mt-2">
+                  {perfDelta > 0 ? <TrendingUp size={14} className="text-green-500" /> : <TrendingDown size={14} className="text-red-500" />}
+                  <span className={`text-xs font-medium ${perfDelta > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                    Perf {perfDelta > 0 ? '+' : ''}{perfDelta}pp | Val {valDelta > 0 ? '+' : ''}{valDelta}pp vs Dic
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Op Summary Cards */}
+        <div className="grid grid-cols-5 gap-4">
+          {[
+            { title: 'Prev. Facturado', value: fmt.currency(data.operativo.prevFacturado), color: COLORS.purplishBlue, sub: `Margen: ${data.operativo.margenPrev}%` },
+            { title: 'Corr. Facturado', value: fmt.currency(data.operativo.corrFacturado), color: data.operativo.corrFacturado >= data.operativo.corrTarget ? COLORS.success : COLORS.warning, sub: `Target: ${fmt.currency(data.operativo.corrTarget)}` },
+            { title: 'OTs Correctivas', value: data.operativo.otsCorrectivas, color: COLORS.electricLemonade, sub: `${data.operativo.otsSinFacturar} sin facturar` },
+            { title: 'Arrastre', value: fmt.currency(data.operativo.arrastre), color: COLORS.error, sub: 'Prev sin OT >30d' },
+            { title: 'ELEC-VHSA', value: `${data.operativo.elecVhsa}%`, color: COLORS.error, sub: 'Célula deficitaria' },
+          ].map((card, i) => (
+            <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{card.title}</p>
+              <p className="text-xl font-bold mt-1" style={{ color: card.color }}>{card.value}</p>
+              <p className="text-[10px] text-gray-400 mt-1">{card.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2">
+          {[
+            { id: 'overview', label: 'Nine-Box Grid', icon: Target },
+            { id: 'performance', label: 'Performance KPIs', icon: TrendingUp },
+            { id: 'values', label: 'Values Radar', icon: Shield },
+            { id: 'revenue', label: 'Revenue Trend', icon: Award },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-3 gap-6">
+            <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Matriz Performance × Values — Supervisores</h3>
+              <div className="relative">
+                <div className="absolute -left-2 top-1/2 -translate-y-1/2 -rotate-90 text-xs font-semibold text-gray-400 tracking-widest">
+                  VALUES →
+                </div>
+                <div className="ml-6">
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div className="text-center text-xs font-semibold text-gray-400">BAJO (0-69%)</div>
+                    <div className="text-center text-xs font-semibold text-gray-400">MEDIO (70-89%)</div>
+                    <div className="text-center text-xs font-semibold text-gray-400">ALTO (90%+)</div>
+                  </div>
+                  {['ALTO', 'MEDIO', 'BAJO'].map((valLevel) => (
+                    <div key={valLevel} className="grid grid-cols-3 gap-2 mb-2">
+                      {['BAJO', 'MEDIO', 'ALTO'].map((perfLevel) => {
+                        const q = getQuadrant(perfLevel, valLevel);
+                        const isActive = q.perf === data.performance.level && q.val === data.values.level;
+                        const wasPrev = prevMonth && q.perf === prevMonth.performance.level && q.val === prevMonth.values.level && !isActive;
+                        return (
+                          <div
+                            key={`${valLevel}-${perfLevel}`}
+                            className={`relative p-3 rounded-lg border-2 transition-all ${
+                              isActive ? 'shadow-lg scale-105' : wasPrev ? 'opacity-70' : 'opacity-40'
+                            }`}
+                            style={{
+                              borderColor: isActive ? q.color : wasPrev ? '#9CA3AF' : '#E5E7EB',
+                              backgroundColor: isActive ? q.color + '12' : 'white',
+                            }}
+                          >
+                            <div className="text-xs font-bold" style={{ color: q.color }}>{q.label}</div>
+                            <div className="text-[10px] text-gray-400 mt-1">Bono: {q.multBono}</div>
+                            {isActive && (
+                              <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: q.color }}>
+                                GG
+                              </div>
+                            )}
+                            {wasPrev && (
+                              <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full flex items-center justify-center bg-gray-400 text-white text-[8px] font-bold">
+                                Dic
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  <div className="text-center text-xs font-semibold text-gray-400 tracking-widest mt-2">← PERFORMANCE →</div>
+                </div>
+              </div>
+              {selectedMonth === 'ene26' && (
+                <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-100">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={14} className="text-green-600" />
+                    <span className="text-xs text-green-700 font-medium">
+                      Movimiento Dic→Ene: Core Player → High Potential. Values subió a ALTO (91%) por iniciativa modelo venta dual + 0 accidentes.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Performance</h4>
+                <div className="flex items-end gap-2">
+                  <span className="text-4xl font-bold" style={{ color: data.performance.score >= 90 ? COLORS.success : data.performance.score >= 70 ? COLORS.warning : COLORS.error }}>
+                    {data.performance.score}%
+                  </span>
+                  <span className="text-sm text-gray-400 mb-1">{data.performance.level}</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 mt-3">
+                  <div className="h-2 rounded-full transition-all" style={{
+                    width: `${data.performance.score}%`,
+                    backgroundColor: data.performance.score >= 90 ? COLORS.success : data.performance.score >= 70 ? COLORS.warning : COLORS.error,
+                  }} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2">Necesita 90%+ para alcanzar ALTO y desbloquear Star</p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Values</h4>
+                <div className="flex items-end gap-2">
+                  <span className="text-4xl font-bold" style={{ color: data.values.score >= 90 ? COLORS.success : data.values.score >= 70 ? COLORS.warning : COLORS.error }}>
+                    {data.values.score}%
+                  </span>
+                  <span className="text-sm text-gray-400 mb-1">{data.values.level}</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 mt-3">
+                  <div className="h-2 rounded-full transition-all" style={{
+                    width: `${data.values.score}%`,
+                    backgroundColor: data.values.score >= 90 ? COLORS.success : data.values.score >= 70 ? COLORS.warning : COLORS.error,
+                  }} />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Comisiones Estimadas</h4>
+                {Object.entries(data.comisiones).map(([key, com]) => (
+                  <div key={key} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <div>
+                      <span className="text-xs font-medium text-gray-700">{key === 'cerrador' ? 'Cerrador 40%' : 'Refacciones'}</span>
+                      <p className="text-[10px] text-gray-400">{com.activacion}</p>
+                    </div>
+                    <span className="text-sm font-bold" style={{ color: COLORS.purplishBlue }}>{com.estimado}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-200">
+                  <span className="text-xs font-semibold text-gray-700">Total Estimado</span>
+                  <span className="text-sm font-bold" style={{ color: COLORS.success }}>
+                    {selectedMonth === 'dic25' ? '$2,284' : '$2,968'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Alertas</h4>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2 text-xs">
+                    <AlertTriangle size={14} className="text-red-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">ELEC-VHSA margen -11%. Decisión: renegociar o cerrar antes 31-Mar.</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs">
+                    <AlertTriangle size={14} className="text-amber-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Arrastre preventivos sin OT: {fmt.currency(data.operativo.arrastre)}. Requiere desbloqueo con Thalía.</span>
+                  </div>
+                  <div className="flex items-start gap-2 text-xs">
+                    <CheckCircle size={14} className="text-green-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-gray-600">Ratio 1:6 óptimo. 0 accidentes. Modelo venta dual activo.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'performance' && (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Scorecard — 8 KPIs Operativos</h3>
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={kpiBarData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" domain={[0, 100]} tickFormatter={v => `${v}%`} />
+                  <YAxis dataKey="name" type="category" width={40} tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    formatter={(val) => [`${val}%`, 'Score']}
+                    labelFormatter={(l) => kpiBarData.find(k => k.name === l)?.fullName}
+                  />
+                  <Bar dataKey="score" radius={[0, 4, 4, 0]}>
+                    {kpiBarData.map((entry, i) => (
+                      <Cell key={i} fill={entry.score >= 90 ? COLORS.success : entry.score >= 70 ? COLORS.warning : COLORS.error} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 overflow-y-auto max-h-[450px]">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Detalle por KPI</h3>
+              <div className="space-y-3">
+                {data.performance.kpis.map(kpi => (
+                  <div key={kpi.id} className="border border-gray-100 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">{kpi.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Peso: {kpi.peso}%</span>
+                        <span className={`text-sm font-bold ${kpi.score >= 90 ? 'text-green-600' : kpi.score >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {kpi.score}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 mt-1">
+                      <span className="text-[10px] text-gray-400">Meta: {kpi.meta}</span>
+                      <span className="text-[10px] text-gray-500 font-medium">Real: {kpi.real}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1 italic">{kpi.detail}</p>
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                      <div className="h-1.5 rounded-full" style={{
+                        width: `${kpi.score}%`,
+                        backgroundColor: kpi.score >= 90 ? COLORS.success : kpi.score >= 70 ? COLORS.warning : COLORS.error,
+                      }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'values' && (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Radar de Competencias Q360</h3>
+              <ResponsiveContainer width="100%" height={320}>
+                <RadarChart data={radarData}>
+                  <PolarGrid stroke="#e5e7eb" />
+                  <PolarAngleAxis dataKey="competencia" tick={{ fontSize: 11, fill: '#6B7280' }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} />
+                  <Radar name="Score" dataKey="score" stroke="#5FDAF4" fill="#5FDAF4" fillOpacity={0.3} strokeWidth={2} />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Detalle Competencias</h3>
+              <div className="space-y-3">
+                {data.values.competencias.map(comp => (
+                  <div key={comp.id} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[10px] font-bold" style={{
+                      backgroundColor: comp.score >= 90 ? COLORS.success : comp.score >= 70 ? COLORS.warning : COLORS.error
+                    }}>
+                      {comp.score}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">{comp.name}</span>
+                        <span className="text-xs text-gray-400">Peso: {comp.peso}%</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 italic">{comp.principio}</p>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 mt-1">
+                        <div className="h-1.5 rounded-full" style={{
+                          width: `${comp.score}%`,
+                          backgroundColor: comp.score >= 90 ? COLORS.success : comp.score >= 70 ? COLORS.warning : COLORS.error,
+                        }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-100">
+                <p className="text-xs text-blue-700 font-medium">Fortaleza clave:</p>
+                <p className="text-xs text-blue-600 mt-1">V3 (Iniciativa) y V4 (Seguridad) consistentemente en 95%+. Modelo venta dual es innovación propia. V1 (Accountability Digital) es el gap para llegar a Star.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'revenue' && (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Revenue Correctivos vs Target</h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}K`} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(val) => [fmt.currency(val), '']} />
+                  <Bar dataKey="corr" name="Correctivos" fill={COLORS.electricLemonade} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="target" name="Target" fill="#E5E7EB" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="prev" name="Preventivos" fill={COLORS.purplishBlue} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">P&L por Célula — {data.label}</h3>
+              <div className="space-y-3">
+                {[
+                  { name: 'MONTA-PREV1', ing: 94961, margen: 46.5, status: 'Saludable', color: COLORS.success },
+                  { name: 'MONTA-PREV2', ing: 94961, margen: 45.6, status: 'Saludable', color: COLORS.success },
+                  { name: 'MONTA-CORR', ing: 94961, margen: 71.0, status: 'Excelente', color: COLORS.purplishBlue },
+                  { name: 'ELEC-VHSA', ing: 33000, margen: -11.0, status: 'Pérdida', color: COLORS.error },
+                ].map(cell => (
+                  <div key={cell.name} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+                    <div>
+                      <span className="text-sm font-medium text-gray-700">{cell.name}</span>
+                      <p className="text-[10px] text-gray-400">{fmt.currency(cell.ing)}/mes</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold" style={{ color: cell.color }}>{cell.margen}%</span>
+                      <p className="text-[10px]" style={{ color: cell.color }}>{cell.status}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 p-4 rounded-lg border-2 border-dashed border-gray-200">
+                <h4 className="text-xs font-semibold text-gray-500 mb-2">Compensación Total Estimada</h4>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-[10px] text-gray-400">Base</p>
+                    <p className="text-lg font-bold" style={{ color: COLORS.liberty }}>$16,950</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400">Comisiones</p>
+                    <p className="text-lg font-bold" style={{ color: COLORS.purplishBlue }}>
+                      {selectedMonth === 'dic25' ? '$2,284' : '$2,968'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-400">Total</p>
+                    <p className="text-lg font-bold" style={{ color: COLORS.success }}>
+                      {selectedMonth === 'dic25' ? '$19,234' : '$19,918'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="text-center text-[10px] text-gray-400 py-4">
+          Q360 Nine-Box Grid — Programa de Incentivos v2.1 — Datos reales O2C {data.label} — CONFIDENCIAL
+        </div>
+      </div>
+    </div>
+  );
+}
